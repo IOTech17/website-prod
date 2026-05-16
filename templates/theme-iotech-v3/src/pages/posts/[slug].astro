@@ -1,0 +1,62 @@
+---
+import Base from "../../layouts/Base.astro";
+import { getEmDashEntry, decodeSlug } from "emdash";
+import { PortableText, Image } from "emdash/ui";
+
+const slug = decodeSlug(Astro.params.slug);
+if (!slug) return Astro.redirect("/404");
+
+const { entry: post, cacheHint } = await getEmDashEntry("posts", slug);
+
+if (!post) return Astro.redirect("/404");
+
+if (Astro.cache?.enabled) Astro.cache.set(cacheHint);
+
+const formattedDate = post.data.publishedAt
+	? post.data.publishedAt.toLocaleDateString("fr-FR", {
+		day: "numeric",
+		month: "long",
+		year: "numeric",
+	})
+	: "";
+---
+
+<Base title={post.data.title ?? ""} description={post.data.excerpt}>
+	<div class="content-container" style="padding-top:3rem;padding-bottom:3rem">
+		<article>
+			<header class="article-header">
+				<div class="article-eyebrow">
+					<a href="/posts" style="color:var(--text-2)">← Retour au blog</a>
+				</div>
+				<h1 class="article-title">{post.data.title}</h1>
+				{formattedDate && (
+					<div class="article-meta">Publié le {formattedDate}</div>
+				)}
+			</header>
+			{post.data.cover_image && (
+				<div class="article-cover">
+					<Image image={post.data.cover_image} />
+				</div>
+			)}
+			<div class="article-body">
+				<PortableText value={post.data.body} />
+			</div>
+			<hr class="divider" />
+			<a href="/posts" class="btn btn-ghost">← Tous les articles</a>
+		</article>
+	</div>
+</Base>
+
+<style>
+.article-cover {
+	margin-bottom: 2rem;
+	border-radius: var(--radius-lg);
+	overflow: hidden;
+	aspect-ratio: 16/9;
+}
+.article-cover img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+</style>

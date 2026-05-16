@@ -1,0 +1,30 @@
+---
+interface Props {
+	post: {
+		id: string;
+		data: {
+			title?: string | null;
+			excerpt?: string | null;
+			publishedAt?: Date | null;
+		};
+	};
+}
+
+const { post } = Astro.props;
+
+const formattedDate = post.data.publishedAt
+	? post.data.publishedAt.toLocaleDateString("fr-FR", {
+		day: "numeric",
+		month: "long",
+		year: "numeric",
+	})
+	: "";
+---
+
+<a href={`/posts/${post.id}`} class="post-card">
+	{formattedDate && <div class="post-card-date">{formattedDate}</div>}
+	<div class="post-card-title">{post.data.title ?? "Sans titre"}</div>
+	{post.data.excerpt && (
+		<p class="post-card-excerpt">{post.data.excerpt}</p>
+	)}
+</a>

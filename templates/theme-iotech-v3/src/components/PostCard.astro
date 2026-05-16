@@ -1,0 +1,49 @@
+---
+import type { MediaValue } from "emdash";
+import { Image } from "emdash/ui";
+
+interface Props {
+	post: {
+		id: string;
+		data: {
+			title?: string | null;
+			excerpt?: string | null;
+			publishedAt?: Date | null;
+			cover_image?: MediaValue | string | null;
+		};
+	};
+}
+
+const { post } = Astro.props;
+
+const formattedDate = post.data.publishedAt
+	? post.data.publishedAt.toLocaleDateString("fr-FR", {
+		day: "numeric",
+		month: "short",
+		year: "numeric",
+	})
+	: "";
+---
+
+<article class="post-card">
+	<a href={`/posts/${post.id}`} class="card-link">
+		{post.data.cover_image ? (
+			<div class="card-image">
+				<Image image={post.data.cover_image} />
+			</div>
+		) : (
+			<div class="card-image card-image--placeholder"></div>
+		)}
+		<div class="card-body">
+			{formattedDate && (
+				<div class="card-meta">
+					<time>{formattedDate}</time>
+				</div>
+			)}
+			<h2 class="card-title">{post.data.title ?? "Sans titre"}</h2>
+			{post.data.excerpt && (
+				<p class="card-excerpt">{post.data.excerpt}</p>
+			)}
+		</div>
+	</a>
+</article>

@@ -1,0 +1,21 @@
+---
+import Base from "../layouts/Base.astro";
+import { getEmDashEntry } from "emdash";
+import { PortableText } from "emdash/ui";
+
+const { entry: page } = await getEmDashEntry("pages", "a-propos");
+---
+
+<Base title="À propos" description="En savoir plus sur IØTech, votre prestataire informatique en Charente-Maritime.">
+	<div class="content-container" style="padding-top:3rem;padding-bottom:3rem">
+		<div class="page-header" style="padding-top:0">
+			<h1 class="page-title">{page?.data.title || "À propos"}</h1>
+		</div>
+		<div class="article-body">
+			{page
+				? <PortableText value={page.data.body} />
+				: <p class="text-muted">Contenu à venir.</p>
+			}
+		</div>
+	</div>
+</Base>

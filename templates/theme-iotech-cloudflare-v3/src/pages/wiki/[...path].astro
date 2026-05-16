@@ -1,0 +1,664 @@
+---
+import WikiLayout from "../../layouts/WikiLayout.astro";
+import { buildTree, countNotes, getSiblings } from "../../utils/wiki-tree.ts";
+import type { NoteEntry } from "../../utils/wiki-tree.ts";
+
+const WIKI_SLUG = "wiki";
+const isAdmin = !!(Astro.locals as any).user;
+
+const wikiApiKey = import.meta.env.WIKI_API_KEY || "";
+const authHeaders: Record<string, string> = isAdmin && wikiApiKey
+	? { "X-Wiki-Key": wikiApiKey }
+	: {};
+
+const pathParam = Astro.params.path;
+const notePath = Array.isArray(pathParam) ? pathParam.join("/") : (pathParam || "");
+const decodedPath = decodeURIComponent(notePath);
+
+let allNotes: NoteEntry[] = [];
+try {
+	const res = await fetch(new URL("/_emdash/api/plugins/markdown-wiki/notes", Astro.url).toString(), {
+		headers: authHeaders,
+	});
+	if (res.ok) {
+		const data = await res.json();
+		allNotes = data?.data?.notes || data?.notes || [];
+	}
+} catch {}
+
+const tree = buildTree(allNotes);
+const total = countNotes(tree);
+const siblings = getSiblings(allNotes, decodedPath);
+
+let note: any = null;
+
+try {
+	const noteRes = await fetch(
+		new URL("/_emdash/api/plugins/markdown-wiki/notes/get", Astro.url).toString(),
+		{
+			method: "POST",
+			headers: { "Content-Type": "application/json", ...authHeaders },
+			body: JSON.stringify({ path: decodedPath }),
+		}
+	);
+	if (!noteRes.ok) return Astro.redirect("/404");
+	const noteData = await noteRes.json();
+	note = noteData?.data?.note || noteData?.note || null;
+	if (!note) return Astro.redirect("/404");
+} catch {
+	return Astro.redirect("/404");
+}
+
+const RE_MD_EXT     = /\.md$/;
+const RE_CODE_BLOCK = /```(\w*)\n([\s\S]*?)```/g;
+const RE_XML_AMP    = /&/g;
+const RE_XML_LT     = /</g;
+const RE_XML_GT     = />/g;
+const RE_INLINE_CODE = /`([^`\n]+)`/g;
+const RE_H6         = /^###### (.+)$/gm;
+const RE_H5         = /^##### (.+)$/gm;
+const RE_H4         = /^#### (.+)$/gm;
+const RE_H3         = /^### (.+)$/gm;
+const RE_H2         = /^## (.+)$/gm;
+const RE_H1_MD      = /^# (.+)$/gm;
+const RE_SLUG_WS    = /\s+/g;
+const RE_SLUG_CHARS = /[^a-z0-9-]/g;
+const RE_HR         = /^(-{3,}|\*{3,})$/gm;
+const RE_BLOCKQUOTE = /^> (.+)$/gm;
+const RE_TABLE      = /(\|.+\|\n\|[-| :]+\|\n(?:\|.+\|\n?)+)/g;
+const RE_UL         = /((?:^[ \t]*[-*+] .+\n?)+)/gm;
+const RE_UL_PREFIX  = /^[ \t]*[-*+] /;
+const RE_OL         = /((?:^\d+\. .+\n?)+)/gm;
+const RE_OL_PREFIX  = /^\d+\. /;
+const RE_BOLD_ITALIC = /\*\*\*(.+?)\*\*\*/g;
+const RE_BOLD       = /\*\*(.+?)\*\*/g;
+const RE_ITALIC     = /\*(.+?)\*/g;
+const RE_STRIKE     = /~~(.+?)~~/g;
+const RE_WIKI_EMBED = /!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+const RE_IMAGE      = /!\[([^\]]*)\]\(([^)]+)\)/g;
+const RE_LINK       = /\[([^\]]+)\]\(([^)]+)\)/g;
+const IMAGE_EXTS    = /\.(png|jpe?g|gif|webp|svg|avif|bmp|tiff)$/i;
+const RE_PARAGRAPH  = /^(?!<[a-z]|%%)(.*\S.*)$/gm;
+const RE_XML_QUOT   = /"/g;
+const RE_JS_HREF    = /^javascript:/i;
+const RE_ENT_AMP    = /&amp;/g;
+const RE_ENT_LT     = /&lt;/g;
+const RE_ENT_GT     = /&gt;/g;
+const RE_ENT_QUOT   = /&quot;/g;
+
+const esc = (s: string) =>
+	s.replace(RE_XML_AMP, "&amp;").replace(RE_XML_LT, "&lt;").replace(RE_XML_GT, "&gt;").replace(RE_XML_QUOT, "&quot;");
+
+const pathParts = decodedPath.split("/");
+const breadcrumbs = pathParts.map((part, i) => ({
+	name: i === pathParts.length - 1 ? part.replace(RE_MD_EXT, "") : part,
+	isLast: i === pathParts.length - 1,
+}));
+
+function fmtDate(iso: string) {
+	return new Date(iso).toLocaleDateString("fr-FR", {
+		day: "numeric", month: "long", year: "numeric",
+	});
+}
+
+// Markdown → HTML (server-side, Web APIs only)
+function mdToHtml(md: string): string {
+	if (!md) return "";
+	const codeBlocks: string[] = [];
+	let out = md.replace(RE_CODE_BLOCK, (_, lang, code) => {
+		const safe = code.replace(RE_XML_AMP, "&amp;").replace(RE_XML_LT, "&lt;").replace(RE_XML_GT, "&gt;");
+		codeBlocks.push(`<pre class="md-pre"><code class="language-${esc(lang || "text")}">${safe}</code></pre>`);
+		return `%%CODE${codeBlocks.length - 1}%%`;
+	});
+	const inlines: string[] = [];
+	out = out.replace(RE_INLINE_CODE, (_, c) => {
+		const safe = c.replace(RE_XML_AMP, "&amp;").replace(RE_XML_LT, "&lt;").replace(RE_XML_GT, "&gt;");
+		inlines.push(`<code class="md-code">${safe}</code>`);
+		return `%%INLINE${inlines.length - 1}%%`;
+	});
+	// Convert Obsidian wiki embeds ![[file.ext]] / ![[file.ext|alias]] before
+	// the generic image pass. Images render as <img>; other files as download links.
+	out = out.replace(RE_WIKI_EMBED, (_, target: string, alias?: string) => {
+		const t = target.trim();
+		const display = alias?.trim() || t.split("/").pop() || t;
+		if (IMAGE_EXTS.test(t)) {
+			return `![${display}](${t})`;
+		}
+		return `[${display}](${t})`;
+	});
+	// Extract images and links before HTML-escaping so we can escape their content
+	// individually while preserving the Markdown structure of the rest of the doc.
+	const images: string[] = [];
+	out = out.replace(RE_IMAGE, (_, alt, src) => {
+		images.push(`<img src="${esc(src.trim())}" alt="${esc(alt)}" class="md-img">`);
+		return `%%IMG${images.length - 1}%%`;
+	});
+	const links: string[] = [];
+	out = out.replace(RE_LINK, (_, text, href) => {
+		const h = href.trim();
+		if (RE_JS_HREF.test(h)) return esc(text);
+		links.push(`<a href="${esc(h)}" class="md-link">${esc(text)}</a>`);
+		return `%%LINK${links.length - 1}%%`;
+	});
+	// HTML-escape remaining Markdown source so headings, list items, table cells,
+	// blockquotes, and paragraphs cannot inject raw HTML.
+	out = out.replace(RE_XML_AMP, "&amp;").replace(RE_XML_LT, "&lt;").replace(RE_XML_GT, "&gt;");
+	out = out.replace(RE_H6, (_, t) => `<h6>${t}</h6>`);
+	out = out.replace(RE_H5, (_, t) => `<h5>${t}</h5>`);
+	out = out.replace(RE_H4, (_, t) => `<h4>${t}</h4>`);
+	out = out.replace(RE_H3, (_, t) => {
+		const raw = t.replace(RE_ENT_AMP, "&").replace(RE_ENT_LT, "<").replace(RE_ENT_GT, ">").replace(RE_ENT_QUOT, '"');
+		const id = raw.toLowerCase().replace(RE_SLUG_WS, "-").replace(RE_SLUG_CHARS, "");
+		return `<h3 id="${id}">${t}</h3>`;
+	});
+	out = out.replace(RE_H2, (_, t) => {
+		const raw = t.replace(RE_ENT_AMP, "&").replace(RE_ENT_LT, "<").replace(RE_ENT_GT, ">").replace(RE_ENT_QUOT, '"');
+		const id = raw.toLowerCase().replace(RE_SLUG_WS, "-").replace(RE_SLUG_CHARS, "");
+		return `<h2 id="${id}">${t}</h2>`;
+	});
+	out = out.replace(RE_H1_MD, (_, t) => `<h1>${t}</h1>`);
+	out = out.replace(RE_HR, "<hr>");
+	out = out.replace(RE_BLOCKQUOTE, (_, t) => `<blockquote>${t}</blockquote>`);
+	out = out.replace(RE_TABLE, table => {
+		const rows = table.trim().split("\n");
+		const ths = rows[0].split("|").filter(c => c.trim());
+		const trs = rows.slice(2).map(r =>
+			"<tr>" + r.split("|").filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join("") + "</tr>"
+		).join("");
+		return `<table><thead><tr>${ths.map(h => `<th>${h.trim()}</th>`).join("")}</tr></thead><tbody>${trs}</tbody></table>`;
+	});
+	out = out.replace(RE_UL, list => {
+		const items = list.trim().split("\n").map(l => `<li>${l.replace(RE_UL_PREFIX, "")}</li>`).join("");
+		return `<ul>${items}</ul>`;
+	});
+	out = out.replace(RE_OL, list => {
+		const items = list.trim().split("\n").map(l => `<li>${l.replace(RE_OL_PREFIX, "")}</li>`).join("");
+		return `<ol>${items}</ol>`;
+	});
+	out = out.replace(RE_BOLD_ITALIC, "<strong><em>$1</em></strong>");
+	out = out.replace(RE_BOLD, "<strong>$1</strong>");
+	out = out.replace(RE_ITALIC, "<em>$1</em>");
+	out = out.replace(RE_STRIKE, "<del>$1</del>");
+	out = out.replace(RE_PARAGRAPH, "<p>$1</p>");
+	codeBlocks.forEach((b, i) => { out = out.replace(`%%CODE${i}%%`, b); });
+	inlines.forEach((b, i) => { out = out.replace(`%%INLINE${i}%%`, b); });
+	// Restore links first, then images — images may appear inside link text (%%IMGn%%)
+	links.forEach((b, i) => { out = out.replace(`%%LINK${i}%%`, b); });
+	images.forEach((b, i) => { out = out.replace(`%%IMG${i}%%`, b); });
+	return out;
+}
+
+const html = mdToHtml(note?.content || "");
+
+const tocItems: Array<{ level: number; text: string; id: string }> = [];
+const contentForToc = (note?.content || "").replace(/```[\s\S]*?```/g, "");
+const hRe = /^#{2,3} (.+)$/gm;
+let m;
+while ((m = hRe.exec(contentForToc)) !== null) {
+	const level = m[0].startsWith("###") ? 3 : 2;
+	const text = m[1];
+	const id = text.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+	tocItems.push({ level, text, id });
+}
+---
+
+<WikiLayout
+	title={note?.title || decodedPath}
+	tree={tree}
+	currentPath={decodedPath}
+	totalNotes={total}
+	wikiSlug={WIKI_SLUG}
+	isAdmin={isAdmin}
+>
+	<div class="wiki-note-wrap">
+		<nav class="wiki-bc" aria-label="Fil d'Ariane">
+			<a href={`/${WIKI_SLUG}`}>Wiki</a>
+			{breadcrumbs.map(crumb => (
+				<>
+					<span aria-hidden="true">/</span>
+					<span class={crumb.isLast ? "wiki-bc-current" : ""}>{crumb.name}</span>
+				</>
+			))}
+		</nav>
+
+		<div class="wiki-note-grid">
+			<article>
+				<header class="wiki-note-header">
+					<div class="wiki-note-title-row">
+						<h1>{note?.title}</h1>
+						{isAdmin && (
+							<button id="wiki-edit-btn" class="btn btn-ghost wiki-edit-btn-sm">✏️ Modifier</button>
+						)}
+					</div>
+					<div class="wiki-note-meta">
+						<span>Modifié le {fmtDate(note?.updatedAt)}</span>
+						{note?.tags?.length > 0 && (
+							<div style="display:flex;gap:0.3rem;flex-wrap:wrap">
+								{note.tags.map((t: string) => (
+									<span class="wiki-tag">#{t}</span>
+								))}
+							</div>
+						)}
+					</div>
+					<div class="wiki-note-path">{decodedPath}</div>
+					{isAdmin && (
+						<div id="wiki-save-bar" class="wiki-save-bar" hidden>
+							<button class="wiki-save-btn btn btn-primary" style="font-size:0.8rem">💾 Sauvegarder</button>
+							<button class="wiki-cancel-btn btn btn-ghost" style="font-size:0.8rem">✕ Annuler</button>
+							<span id="wiki-editor-status" class="wiki-editor-status" hidden></span>
+						</div>
+					)}
+				</header>
+
+				<div id="wiki-view" class="wiki-body" set:html={html} />
+
+				{isAdmin && (
+					<div id="wiki-editor-wrap" hidden>
+						<div class="wiki-toolbar" role="toolbar" aria-label="Formatage Markdown">
+							<button data-cmd="bold" title="Gras (Ctrl+B)"><strong>B</strong></button>
+							<button data-cmd="italic" title="Italique (Ctrl+I)"><em>I</em></button>
+							<button data-cmd="strike" title="Barré (~~texte~~)">S̶</button>
+							<button data-cmd="code" title="Code inline">`x`</button>
+							<button data-cmd="codeblock" title="Bloc de code">```</button>
+							<button data-cmd="h2" title="Titre H2">H2</button>
+							<button data-cmd="h3" title="Titre H3">H3</button>
+							<button data-cmd="link" title="Lien [texte](url)">🔗</button>
+							<div style="flex:1"></div>
+							<label for="wiki-vis-select" style="font-size:0.68rem;color:var(--text-2)">Visibilité</label>
+							<select id="wiki-vis-select" class="wiki-vis-select">
+								<option value="public">🌐 Publique</option>
+								<option value="private">🔒 Privée</option>
+								<option value="clients">👥 Clients</option>
+							</select>
+						</div>
+						<textarea id="wiki-ta" class="wiki-ta" spellcheck="true" autocorrect="off" autocapitalize="off" placeholder="Contenu Markdown…"></textarea>
+						<div class="wiki-editor-hint">Ctrl+S sauvegarder · Échap annuler · Tab indenter (2 espaces) · Ctrl+B gras · Ctrl+I italique</div>
+					</div>
+				)}
+
+				<footer style="margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--border)">
+					<div style="display:flex;gap:0.5rem;margin-bottom:1.5rem;flex-wrap:wrap;align-items:center">
+						<a href={`/${WIKI_SLUG}`} class="btn btn-ghost">← Wiki</a>
+						{isAdmin && (
+							<>
+								<button id="wiki-move-btn" class="btn btn-ghost" style="font-size:0.78rem">🔀 Déplacer</button>
+								<button id="wiki-delete-btn" class="btn btn-ghost" style="font-size:0.78rem;color:#e53e3e">🗑️ Supprimer</button>
+							</>
+						)}
+					</div>
+					{siblings.length > 0 && (
+						<div>
+							<div style="font-size:0.65rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-2);margin-bottom:0.5rem">
+								Dans le même dossier
+							</div>
+							{siblings.slice(0, 5).map(s => (
+								<a href={`/${WIKI_SLUG}/${s.path.split("/").map((seg: string) => encodeURIComponent(seg)).join("/")}`}
+									style="display:block;font-size:0.78rem;color:var(--text-1);padding:0.25rem 0;text-decoration:none">
+									{s.title}
+								</a>
+							))}
+						</div>
+					)}
+				</footer>
+			</article>
+
+			{tocItems.length > 2 && (
+				<aside class="wiki-toc">
+					<div class="wiki-toc-title">Sur cette page</div>
+					{tocItems.map(h => (
+						<a href={`#${h.id}`} class={`wiki-toc-link${h.level === 3 ? " wiki-toc-sub" : ""}`}>
+							{h.text}
+						</a>
+					))}
+				</aside>
+			)}
+		</div>
+	</div>
+
+	{isAdmin && (
+		<dialog id="wiki-move-dialog" class="wiki-dialog">
+			<div class="wiki-dialog-header">
+				<span class="wiki-dialog-title">🔀 Déplacer la note</span>
+				<button id="wiki-move-close" class="wiki-dialog-close" aria-label="Fermer">✕</button>
+			</div>
+			<div class="wiki-dialog-body">
+				<div class="wiki-dialog-section">
+					<div class="wiki-dialog-label">Note actuelle</div>
+					<code id="wiki-move-current" class="wiki-dialog-code">{decodedPath}</code>
+				</div>
+				<div class="wiki-dialog-section">
+					<div class="wiki-dialog-label">Dossiers existants <span id="wiki-move-folders-hint" style="font-weight:400;text-transform:none;letter-spacing:0">(cliquer pour déplacer dedans)</span></div>
+					<div id="wiki-move-folders" class="wiki-move-folders">
+						<span style="font-size:0.75rem;color:var(--text-2)">Chargement…</span>
+					</div>
+				</div>
+				<div class="wiki-dialog-section">
+					<label for="wiki-move-input" class="wiki-dialog-label">Nouveau chemin complet</label>
+					<input
+						type="text"
+						id="wiki-move-input"
+						class="wiki-move-input"
+						spellcheck="false"
+						autocomplete="off"
+						placeholder="Dossier/Nom-de-la-note.md"
+					/>
+					<div class="wiki-dialog-hint">Ex : Archive/Bienvenue.md — le dossier est créé automatiquement.</div>
+					<div id="wiki-move-error" class="wiki-dialog-error" hidden></div>
+				</div>
+			</div>
+			<div class="wiki-dialog-footer">
+				<button id="wiki-move-confirm" class="btn btn-primary">Déplacer</button>
+				<button id="wiki-move-cancel" class="btn btn-ghost">Annuler</button>
+			</div>
+		</dialog>
+	)}
+</WikiLayout>
+
+<script define:vars={{ isAdmin, notePath: decodedPath, initContent: note?.content ?? "", initVisibility: note?.visibility ?? "public", wikiSlug: WIKI_SLUG, wikiApiKey: isAdmin ? wikiApiKey : "" }}>
+if (isAdmin) {
+	const editBtn    = document.getElementById("wiki-edit-btn");
+	const saveBar    = document.getElementById("wiki-save-bar");
+	const saveBtns   = document.querySelectorAll(".wiki-save-btn");
+	const cancelBtns = document.querySelectorAll(".wiki-cancel-btn");
+	const statusEl   = document.getElementById("wiki-editor-status");
+	const view       = document.getElementById("wiki-view");
+	const editorWrap = document.getElementById("wiki-editor-wrap");
+	const ta         = document.getElementById("wiki-ta");
+	const visSelect  = document.getElementById("wiki-vis-select");
+	const moveBtn    = document.getElementById("wiki-move-btn");
+	const deleteBtn  = document.getElementById("wiki-delete-btn");
+
+	function setStatus(msg, isError) {
+		if (!statusEl) return;
+		statusEl.textContent = msg;
+		statusEl.style.color = isError ? "#e53e3e" : "var(--text-2)";
+		statusEl.hidden = !msg;
+	}
+
+	function enterEdit() {
+		ta.value = initContent;
+		visSelect.value = initVisibility;
+		view.hidden = true;
+		editorWrap.hidden = false;
+		saveBar.hidden = false;
+		editBtn.hidden = true;
+		ta.focus();
+		ta.setSelectionRange(0, 0);
+	}
+
+	function exitEdit() {
+		view.hidden = false;
+		editorWrap.hidden = true;
+		saveBar.hidden = true;
+		editBtn.hidden = false;
+		setStatus("", false);
+	}
+
+	const authH = wikiApiKey ? { "X-Wiki-Key": wikiApiKey } : {};
+
+	async function save() {
+		const content = ta.value.trim();
+		if (!content) { setStatus("Le contenu ne peut pas être vide.", true); return; }
+		saveBtns.forEach(b => { b.disabled = true; b.textContent = "Sauvegarde…"; });
+		setStatus("", false);
+		try {
+			const res = await fetch("/_emdash/api/plugins/markdown-wiki/notes/update", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "X-EmDash-Request": "1", ...authH },
+				body: JSON.stringify({ path: notePath, content, visibility: visSelect.value }),
+			});
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err?.error?.message || `Erreur ${res.status}`);
+			}
+			window.location.reload();
+		} catch (e) {
+			setStatus(e.message, true);
+			saveBtns.forEach(b => { b.disabled = false; b.textContent = "💾 Sauvegarder"; });
+		}
+	}
+
+	// ── Dialog Déplacer ───────────────────────────────────────────────────
+	const moveDialog  = document.getElementById("wiki-move-dialog");
+	const moveFolders = document.getElementById("wiki-move-folders");
+	const moveInput   = document.getElementById("wiki-move-input");
+	const moveError   = document.getElementById("wiki-move-error");
+	const moveConfirm = document.getElementById("wiki-move-confirm");
+	const moveCancel  = document.getElementById("wiki-move-cancel");
+	const moveClose   = document.getElementById("wiki-move-close");
+
+	async function openMoveDialog() {
+		moveInput.value = notePath;
+		moveError.hidden = true;
+		moveConfirm.disabled = false;
+		moveConfirm.textContent = "Déplacer";
+		moveDialog.showModal();
+		moveInput.select();
+
+		// Charger les dossiers existants
+		moveFolders.innerHTML = '<span style="font-size:0.75rem;color:var(--text-2)">Chargement…</span>';
+		try {
+			const res = await fetch("/_emdash/api/plugins/markdown-wiki/notes", {
+				headers: authH,
+			});
+			const data = await res.json();
+			const notes = data?.data?.notes || data?.notes || [];
+
+			// Extraire tous les dossiers uniques
+			const folders = new Set();
+			for (const note of notes) {
+				const parts = note.path.split("/");
+				for (let i = 1; i < parts.length; i++) {
+					folders.add(parts.slice(0, i).join("/"));
+				}
+			}
+
+			if (folders.size === 0) {
+				moveFolders.innerHTML = '<span style="font-size:0.75rem;color:var(--text-2)">Aucun dossier — créez des notes avec des sous-chemins.</span>';
+			} else {
+				moveFolders.textContent = "";
+				for (const f of [...folders].toSorted()) {
+					const btn = document.createElement("button");
+					btn.className = "wiki-folder-chip";
+					btn.type = "button";
+					btn.dataset.folder = f;
+					btn.textContent = "📁 " + f;
+					btn.addEventListener("click", () => {
+						const filename = notePath.split("/").pop();
+						moveInput.value = `${f}/${filename}`;
+						moveInput.focus();
+					});
+					moveFolders.appendChild(btn);
+				}
+			}
+		} catch {
+			moveFolders.innerHTML = '<span style="font-size:0.75rem;color:#e53e3e">Erreur de chargement.</span>';
+		}
+	}
+
+	async function confirmMove() {
+		const newPath = moveInput.value.trim();
+		if (!newPath || newPath === notePath) { moveDialog.close(); return; }
+		if (!newPath.endsWith(".md")) {
+			moveError.textContent = 'Le chemin doit se terminer par ".md".';
+			moveError.hidden = false;
+			return;
+		}
+		moveConfirm.disabled = true;
+		moveConfirm.textContent = "Déplacement…";
+		moveError.hidden = true;
+		try {
+			const res = await fetch("/_emdash/api/plugins/markdown-wiki/notes/move", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "X-EmDash-Request": "1", ...authH },
+				body: JSON.stringify({ path: notePath, newPath }),
+			});
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err?.error?.message || `Erreur ${res.status}`);
+			}
+			const encoded = newPath.split("/").map(s => encodeURIComponent(s)).join("/");
+			window.location.href = `/${wikiSlug}/${encoded}`;
+		} catch (e) {
+			moveError.textContent = e.message;
+			moveError.hidden = false;
+			moveConfirm.disabled = false;
+			moveConfirm.textContent = "Déplacer";
+		}
+	}
+
+	moveConfirm?.addEventListener("click", confirmMove);
+	moveCancel?.addEventListener("click", () => moveDialog.close());
+	moveClose?.addEventListener("click", () => moveDialog.close());
+	moveInput?.addEventListener("keydown", e => {
+		if (e.key === "Enter") confirmMove();
+		if (e.key === "Escape") moveDialog.close();
+	});
+	moveDialog?.addEventListener("click", e => {
+		if (e.target === moveDialog) moveDialog.close();
+	});
+
+	function doMove() { openMoveDialog(); }
+
+	// Toolbar
+	function wrapSel(before, after) {
+		const a = after ?? before;
+		const s = ta.selectionStart, e = ta.selectionEnd;
+		const sel = ta.value.slice(s, e) || "texte";
+		ta.setRangeText(before + sel + a, s, e, "select");
+		ta.focus();
+	}
+	function insertPrefix(prefix) {
+		const s = ta.selectionStart;
+		const lineStart = ta.value.lastIndexOf("\n", s - 1) + 1;
+		ta.setRangeText(prefix, lineStart, lineStart, "end");
+		ta.focus();
+	}
+
+	document.querySelectorAll("[data-cmd]").forEach(btn => {
+		btn.addEventListener("click", e => {
+			e.preventDefault();
+			switch (btn.dataset.cmd) {
+				case "bold":      wrapSel("**"); break;
+				case "italic":    wrapSel("*"); break;
+				case "strike":    wrapSel("~~"); break;
+				case "code":      wrapSel("`"); break;
+				case "codeblock": wrapSel("```\n", "\n```"); break;
+				case "h2":        insertPrefix("## "); break;
+				case "h3":        insertPrefix("### "); break;
+				case "link":      wrapSel("[", "](url)"); break;
+			}
+		});
+	});
+
+	ta?.addEventListener("keydown", e => {
+		if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); save(); }
+		if ((e.ctrlKey || e.metaKey) && e.key === "b") { e.preventDefault(); wrapSel("**"); }
+		if ((e.ctrlKey || e.metaKey) && e.key === "i") { e.preventDefault(); wrapSel("*"); }
+		if (e.key === "Escape") exitEdit();
+		if (e.key === "Tab") {
+			e.preventDefault();
+			const s = ta.selectionStart;
+			ta.setRangeText("  ", s, s, "end");
+		}
+	});
+
+	editBtn?.addEventListener("click", enterEdit);
+	saveBtns.forEach(b => b.addEventListener("click", save));
+	cancelBtns.forEach(b => b.addEventListener("click", exitEdit));
+	moveBtn?.addEventListener("click", doMove);
+	deleteBtn?.addEventListener("click", doDelete);
+
+	// Auto-edit si ?edit=1 dans l'URL (après création d'une note)
+	if (new URLSearchParams(window.location.search).get("edit") === "1") {
+		enterEdit();
+		history.replaceState(null, "", window.location.pathname);
+	}
+}
+
+async function doDelete() {
+	if (!confirm(`Supprimer définitivement "${notePath}" ?`)) return;
+	try {
+		const res = await fetch("/_emdash/api/plugins/markdown-wiki/notes/delete", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", "X-EmDash-Request": "1", ...(wikiApiKey ? { "X-Wiki-Key": wikiApiKey } : {}) },
+			body: JSON.stringify({ path: notePath }),
+		});
+		if (!res.ok) {
+			const err = await res.json().catch(() => ({}));
+			throw new Error(err?.error?.message || `Erreur ${res.status}`);
+		}
+		window.location.href = `/${wikiSlug}`;
+	} catch (e) { alert("Erreur lors de la suppression : " + e.message); }
+}
+</script>
+
+<style>
+.wiki-note-wrap { padding: 1.5rem 2rem; }
+.wiki-bc { display: flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; color: var(--text-2); margin-bottom: 1.5rem; }
+.wiki-bc a { color: var(--text-2); text-decoration: none; }
+.wiki-bc a:hover { color: var(--accent); }
+.wiki-bc-current { color: var(--text-1); }
+.wiki-note-grid { display: grid; grid-template-columns: 1fr 200px; gap: 2.5rem; align-items: start; }
+@media (max-width: 1100px) { .wiki-note-grid { grid-template-columns: 1fr; } }
+.wiki-note-header { margin-bottom: 2rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--border); }
+.wiki-note-header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 0.6rem; }
+.wiki-note-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; font-size: 0.72rem; color: var(--text-2); margin-bottom: 0.4rem; }
+.wiki-tag { font-size: 0.68rem; padding: 0.1em 0.45em; background: var(--bg-3); border: 1px solid var(--border); border-radius: 3px; color: var(--text-2); }
+.wiki-note-path { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-2); }
+.wiki-body { font-size: 0.9rem; line-height: 1.8; color: var(--text-1); max-width: 720px; }
+.wiki-body :global(h1) { font-size: 1.6rem; font-weight: 800; margin: 2rem 0 0.75rem; color: var(--text-0); }
+.wiki-body :global(h2) { font-size: 1.2rem; font-weight: 700; margin: 2rem 0 0.75rem; color: var(--text-0); padding-bottom: 0.4rem; border-bottom: 1px solid var(--border); }
+.wiki-body :global(h3) { font-size: 1rem; font-weight: 700; margin: 1.5rem 0 0.5rem; color: var(--text-0); }
+.wiki-body :global(p) { margin: 0.9rem 0; }
+.wiki-body :global(ul), .wiki-body :global(ol) { padding-left: 1.5rem; margin: 0.75rem 0; }
+.wiki-body :global(li) { margin: 0.3rem 0; color: var(--text-1); }
+.wiki-body :global(blockquote) { border-left: 3px solid var(--accent); padding: 0.5rem 1rem; margin: 1rem 0; background: var(--bg-2); border-radius: 0 4px 4px 0; font-style: italic; }
+.wiki-body :global(hr) { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+.wiki-body :global(strong) { color: var(--text-0); font-weight: 700; }
+.wiki-body :global(a.md-link) { color: var(--accent); text-decoration: underline; }
+.wiki-body :global(img.md-img) { max-width: 100%; border-radius: 6px; border: 1px solid var(--border); margin: 1rem 0; }
+.wiki-body :global(code.md-code) { font-family: var(--font-mono); font-size: 0.85em; background: var(--bg-3); color: var(--accent); padding: 0.15em 0.4em; border-radius: 3px; border: 1px solid var(--border); }
+.wiki-body :global(pre.md-pre) { background: var(--bg-2); border: 1px solid var(--border); border-radius: 6px; padding: 1.25rem; overflow-x: auto; margin: 1.25rem 0; }
+.wiki-body :global(pre.md-pre code) { font-family: var(--font-mono); font-size: 0.82rem; color: var(--text-0); background: none; padding: 0; border: none; }
+.wiki-body :global(table) { width: 100%; border-collapse: collapse; margin: 1.25rem 0; font-size: 0.85rem; }
+.wiki-body :global(th) { background: var(--bg-3); color: var(--text-0); font-weight: 700; text-align: left; padding: 0.6rem 1rem; border: 1px solid var(--border); }
+.wiki-body :global(td) { padding: 0.5rem 1rem; border: 1px solid var(--border); color: var(--text-1); }
+.wiki-toc { position: sticky; top: calc(var(--header-height) + 1.5rem); padding: 1rem; background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--radius); }
+.wiki-note-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
+.wiki-note-title-row h1 { margin-bottom: 0; flex: 1; }
+.wiki-edit-btn-sm { font-size: 0.75rem; padding: 0.35rem 0.75rem; flex-shrink: 0; margin-top: 0.25rem; }
+.wiki-save-bar { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap; }
+.wiki-editor-status { font-size: 0.75rem; color: var(--text-2); }
+.wiki-toolbar { display: flex; align-items: center; gap: 0.25rem; padding: 0.5rem 0.75rem; background: var(--bg-2); border: 1px solid var(--border); border-bottom: none; border-radius: 4px 4px 0 0; flex-wrap: wrap; }
+.wiki-toolbar button { padding: 0.2rem 0.5rem; background: transparent; border: 1px solid transparent; border-radius: 3px; cursor: pointer; font-size: 0.78rem; color: var(--text-1); font-family: var(--font-mono); line-height: 1.4; }
+.wiki-toolbar button:hover { background: var(--bg-3); border-color: var(--border); color: var(--text-0); }
+.wiki-vis-select { background: var(--bg-1); border: 1px solid var(--border); border-radius: 3px; padding: 0.2rem 0.4rem; font-size: 0.72rem; color: var(--text-1); cursor: pointer; }
+.wiki-ta { width: 100%; min-height: 420px; background: var(--bg-1); border: 1px solid var(--border); border-radius: 0 0 4px 4px; padding: 1.25rem; font-family: var(--font-mono); font-size: 0.85rem; line-height: 1.75; color: var(--text-0); resize: vertical; outline: none; tab-size: 2; }
+.wiki-ta:focus { border-color: var(--accent); }
+.wiki-editor-hint { font-size: 0.67rem; color: var(--text-2); margin-top: 0.4rem; }
+.wiki-toc-title { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-2); margin-bottom: 0.6rem; }
+.wiki-toc-link { display: block; color: var(--text-2); padding: 0.2rem 0.5rem; font-size: 0.75rem; text-decoration: none; border-left: 2px solid transparent; transition: all 0.1s; line-height: 1.4; }
+.wiki-toc-link:hover { color: var(--accent); border-left-color: var(--accent); }
+.wiki-toc-sub { padding-left: 1.25rem; font-size: 0.7rem; }
+
+/* ── Dialog Déplacer ────────────────────────────────────────────────────── */
+.wiki-dialog { border: 1px solid var(--border); border-radius: 8px; background: var(--bg-1); color: var(--text-0); padding: 0; min-width: min(460px, 92vw); max-width: 92vw; box-shadow: 0 24px 64px rgba(0,0,0,0.2); }
+.wiki-dialog::backdrop { background: rgba(0,0,0,0.45); backdrop-filter: blur(2px); }
+.wiki-dialog-header { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1.25rem; border-bottom: 1px solid var(--border); }
+.wiki-dialog-title { font-weight: 700; font-size: 0.88rem; color: var(--text-0); }
+.wiki-dialog-close { appearance: none; -webkit-appearance: none; background: transparent; border: none; cursor: pointer; color: var(--text-2); font-size: 0.85rem; padding: 0.2rem 0.5rem; border-radius: 3px; line-height: 1; }
+.wiki-dialog-close:hover { color: var(--text-0); background: var(--bg-3); }
+.wiki-dialog-body { padding: 1.1rem 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+.wiki-dialog-footer { display: flex; gap: 0.5rem; padding: 0.9rem 1.25rem; border-top: 1px solid var(--border); justify-content: flex-end; }
+.wiki-dialog-section { display: flex; flex-direction: column; gap: 0.35rem; }
+.wiki-dialog-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-2); }
+.wiki-dialog-code { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); background: var(--bg-2); padding: 0.3rem 0.6rem; border-radius: 4px; border: 1px solid var(--border); word-break: break-all; }
+.wiki-dialog-hint { font-size: 0.68rem; color: var(--text-2); }
+.wiki-dialog-error { font-size: 0.75rem; color: #e53e3e; }
+.wiki-move-folders { display: flex; flex-wrap: wrap; gap: 0.35rem; min-height: 1.8rem; align-items: flex-start; }
+.wiki-folder-chip { appearance: none; -webkit-appearance: none; display: inline-flex; align-items: center; gap: 0.2rem; padding: 0.22rem 0.6rem; background: var(--bg-3); border: 1px solid var(--border); border-radius: 4px; font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-1); cursor: pointer; transition: all 0.1s; white-space: nowrap; }
+.wiki-folder-chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-glow, rgba(255,100,50,0.08)); }
+.wiki-move-input { width: 100%; background: var(--bg-2); border: 1px solid var(--border); border-radius: 4px; padding: 0.45rem 0.65rem; font-family: var(--font-mono); font-size: 0.82rem; color: var(--text-0); outline: none; }
+.wiki-move-input:focus { border-color: var(--accent); }
+</style>

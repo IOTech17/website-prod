@@ -1,0 +1,30 @@
+{
+  "name": "@iotech/markdown-wiki",
+  "version": "0.4.0",
+  "description": "Wiki plugin for EmDash CMS — Markdown notes, Obsidian sync, full-text search, version history, RSS feed",
+  "type": "module",
+  "main": "dist/index.mjs",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.mts"
+    },
+    "./sandbox": "./dist/sandbox-entry.mjs"
+  },
+  "files": ["dist"],
+  "keywords": ["emdash", "emdash-plugin", "wiki", "obsidian", "markdown"],
+  "license": "MIT",
+  "author": "IOTech17",
+  "scripts": {
+    "build": "tsdown src/index.ts src/sandbox-entry.ts --format esm --dts --clean",
+    "dev": "tsdown src/index.ts src/sandbox-entry.ts --format esm --dts --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "emdash": "workspace:>=0.10.0"
+  },
+  "devDependencies": {
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="6" fill="#141414"/>
+  <circle cx="8" cy="16" r="3" fill="#ff6b35"/>
+  <text x="13" y="21" font-family="monospace" font-size="14" font-weight="bold" fill="#f0f0f0">IO</text>
+</svg>

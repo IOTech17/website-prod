@@ -1,0 +1,58 @@
+---
+import type { TreeNode } from "../utils/wiki-tree.ts";
+
+interface Props {
+	node: TreeNode;
+	currentPath: string;
+	wikiSlug: string;
+}
+
+const { node, currentPath, wikiSlug } = Astro.props;
+
+const isActive = node.type === "note" && currentPath === node.note?.path;
+const isOpen =
+	node.type === "folder" &&
+	(currentPath.startsWith(node.path + "/") || currentPath === node.path);
+
+const visibilityBadge: Record<string, string> = {
+	public: "",
+	private: "🔒",
+	clients: "👥",
+};
+---
+
+{node.type === "folder" ? (
+	<details class="wiki-folder" open={isOpen}>
+		<summary class="wiki-folder-header">
+			<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" class="wiki-chevron" style="width:10px;height:10px;flex-shrink:0;transition:transform 0.15s">
+				<path d="M6 4l4 4-4 4"/>
+			</svg>
+			<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:12px;height:12px;flex-shrink:0;color:var(--accent)">
+				<path d="M2 5h4l2-2h6v10H2V5z"/>
+			</svg>
+			<span class="wiki-folder-name">{node.name}</span>
+			<span class="wiki-folder-count">
+				{node.children?.filter(c => c.type === "note").length || 0}
+			</span>
+		</summary>
+		<div class="wiki-folder-children">
+			{node.children?.map(child => (
+				<Astro.self node={child} currentPath={currentPath} wikiSlug={wikiSlug} />
+			))}
+		</div>
+	</details>
+) : (
+	<a
+		href={`/${wikiSlug}/${node.note!.path.split("/").map((s: string) => encodeURIComponent(s)).join("/")}`}
+		class={`wiki-note-link ${isActive ? "active" : ""}`}
+		aria-current={isActive ? "page" : undefined}
+	>
+		<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:11px;height:11px;flex-shrink:0;opacity:0.4">
+			<path d="M3 2h8l3 3v9H3V2z"/>
+		</svg>
+		<span class="wiki-note-name">{node.name}</span>
+		{node.note?.visibility && node.note.visibility !== "public" && (
+			<span class="wiki-note-badge">{visibilityBadge[node.note.visibility]}</span>
+		)}
+	</a>
+)}

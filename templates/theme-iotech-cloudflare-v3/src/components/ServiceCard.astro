@@ -1,0 +1,30 @@
+---
+interface Props {
+	service: {
+		id: string;
+		data: {
+			title?: string | null;
+			excerpt?: string | null;
+		};
+	};
+}
+
+const { service } = Astro.props;
+
+const iconMap: Record<string, string> = {
+	"creation-site": "🌐",
+	"sauvegarde": "💾",
+	"cybersecurite": "🔒",
+	"depannage": "🔧",
+	"reseau": "📡",
+};
+const icon = iconMap[service.id] || "💻";
+---
+
+<a href={`/services#${service.id}`} class="service-card">
+	<div class="service-icon">{icon}</div>
+	<div class="service-title">{service.data.title}</div>
+	{service.data.excerpt && (
+		<p class="service-desc">{service.data.excerpt}</p>
+	)}
+</a>

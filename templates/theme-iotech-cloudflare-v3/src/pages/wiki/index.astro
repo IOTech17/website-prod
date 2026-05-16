@@ -1,0 +1,100 @@
+---
+import WikiLayout from "../../layouts/WikiLayout.astro";
+import { buildTree, countNotes } from "../../utils/wiki-tree.ts";
+import type { NoteEntry } from "../../utils/wiki-tree.ts";
+
+const WIKI_SLUG = "wiki";
+const isAdmin = !!(Astro.locals as any).user;
+
+const wikiApiKey = import.meta.env.WIKI_API_KEY || "";
+const authHeaders: Record<string, string> = isAdmin && wikiApiKey
+	? { "X-Wiki-Key": wikiApiKey }
+	: {};
+
+let notes: NoteEntry[] = [];
+try {
+	const res = await fetch(new URL("/_emdash/api/plugins/markdown-wiki/notes", Astro.url).toString(), {
+		headers: authHeaders,
+	});
+	if (res.ok) {
+		const data = await res.json();
+		notes = data?.data?.notes || data?.notes || [];
+	}
+} catch {}
+
+const tree = buildTree(notes);
+const total = countNotes(tree);
+---
+
+<WikiLayout title="Wiki" tree={tree} currentPath="" totalNotes={total} wikiSlug={WIKI_SLUG} isAdmin={isAdmin}>
+	<div style="padding:2.5rem;max-width:720px">
+		{total === 0 ? (
+			<div style="text-align:center;padding:5rem 2rem">
+				<div style="font-size:3rem;margin-bottom:1rem;opacity:0.35">📝</div>
+				<h2 style="font-size:1.25rem;margin-bottom:0.5rem">Aucune note publiée</h2>
+				<p class="text-muted" style="margin-bottom:1.5rem;line-height:1.6">
+					Synchronisez depuis Obsidian ou créez une note depuis l'admin wiki.
+				</p>
+				<a href="/wiki/rss.xml" class="btn btn-ghost" style="font-size:0.75rem">📡 Flux RSS</a>
+			</div>
+		) : (
+			<div>
+				<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:0.75rem;padding-bottom:1rem;border-bottom:1px solid var(--border)">
+					<h1 style="font-size:1.5rem;font-weight:800;letter-spacing:-0.02em">
+						<span style="color:var(--accent)">📖</span> Wiki
+					</h1>
+					<div style="display:flex;align-items:center;gap:1rem">
+						<span class="text-muted">{total} note{total > 1 ? "s" : ""}</span>
+						<a href="/wiki/rss.xml" style="font-size:0.72rem;color:var(--text-2)">📡 RSS</a>
+					</div>
+				</div>
+				<p class="text-muted" style="margin-bottom:2rem">
+					Sélectionnez une note dans l'arborescence ou utilisez la recherche (Ctrl+K).
+				</p>
+				<div style="margin-bottom:2rem">
+					<div style="font-size:0.65rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-2);margin-bottom:0.6rem">Notes récentes</div>
+					<div style="display:flex;flex-direction:column;gap:0.25rem">
+						{notes
+							.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+							.slice(0, 8)
+							.map(note => (
+								<a href={`/${WIKI_SLUG}/${note.path.split("/").map((seg: string) => encodeURIComponent(seg)).join("/")}`}
+									style="display:grid;grid-template-columns:1fr auto auto;gap:0.75rem;align-items:center;padding:0.45rem 0.75rem;border-radius:4px;border:1px solid transparent;color:inherit;text-decoration:none;transition:all 0.15s"
+									class="note-recent-item">
+									<span style="font-size:0.82rem;color:var(--text-0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{note.title}</span>
+									<span style="font-size:0.68rem;color:var(--text-2)">{note.path.split("/").slice(0,-1).join("/") || "/"}</span>
+									<span style="font-size:0.68rem;color:var(--text-2);white-space:nowrap">
+										{new Date(note.updatedAt).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+									</span>
+								</a>
+							))
+						}
+					</div>
+				</div>
+				{(() => {
+					const tags = [...new Set(notes.flatMap(n => n.tags))].sort();
+					return tags.length > 0 && (
+						<div>
+							<div style="font-size:0.65rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-2);margin-bottom:0.5rem">Tags</div>
+							<div style="display:flex;flex-wrap:wrap;gap:0.4rem">
+								{tags.map(tag => (
+									<span style="font-size:0.7rem;padding:0.2em 0.55em;background:var(--bg-3);border:1px solid var(--border);border-radius:3px;color:var(--text-2)">
+										#{tag}
+									</span>
+								))}
+							</div>
+						</div>
+					);
+				})()}
+			</div>
+		)}
+	</div>
+</WikiLayout>
+
+<style>
+.note-recent-item:hover {
+	background: var(--bg-2) !important;
+	border-color: var(--border) !important;
+	transform: translateX(3px);
+}
+</style>

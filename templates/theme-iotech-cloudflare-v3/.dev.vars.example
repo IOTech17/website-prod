@@ -1,0 +1,9 @@
+# Cloudflare Workers local dev secrets — copy to .dev.vars and fill in values
+# .dev.vars is gitignored; never commit it
+
+# Wiki API key — generate via EmDash admin:
+#   POST /_emdash/api/plugins/markdown-wiki/config/apikey/rotate
+# Required for:
+#   - Logged-in admin to see private wiki notes on the frontend
+#   - Obsidian two-way sync (X-Wiki-Key header)
+WIKI_API_KEY=

@@ -1,0 +1,121 @@
+---
+import { getMenu, getEmDashCollection, getSiteSettings } from "emdash";
+import { EmDashHead, EmDashBodyStart, EmDashBodyEnd } from "emdash/ui";
+import { createPublicPageContext } from "emdash/page";
+import { Font } from "astro:assets";
+import "../styles/global.css";
+
+interface Props {
+	title?: string;
+	description?: string;
+}
+
+const { title = "", description = "" } = Astro.props;
+
+const settings = await getSiteSettings();
+
+// getMenu() peut retourner null — toujours utiliser ?.items
+const headerMenu = await getMenu("header");
+const footerNavMenu = await getMenu("footer-nav");
+const footerContactMenu = await getMenu("footer-contact");
+
+const pageTitle = title
+	? `${title} — ${settings.title}`
+	: settings.title;
+
+const currentPath = Astro.url.pathname;
+
+const pageCtx = createPublicPageContext({
+	Astro,
+	kind: "custom",
+	pageType: "website",
+	title: pageTitle,
+	pageTitle: title || settings.title,
+	description: description || settings.tagline,
+	siteName: settings.title,
+});
+
+const isLoggedIn = !!Astro.locals.user;
+---
+
+<!doctype html>
+<html lang="fr">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<Font cssVariable="--font-sans" preload />
+	<Font cssVariable="--font-mono" />
+	<title>{pageTitle}</title>
+	<EmDashHead page={pageCtx} />
+	<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+	<link rel="alternate" type="application/rss+xml" title={settings.title} href="/rss.xml" />
+</head>
+<body>
+	<EmDashBodyStart page={pageCtx} />
+
+	<header class="site-header">
+		<div class="container">
+			<a href="/" class="site-logo">
+				<span class="logo-dot"></span>
+				{settings.title}
+			</a>
+			<nav class="site-nav" aria-label="Navigation principale">
+				{headerMenu?.items.map(item => (
+					<a
+						href={item.url}
+						aria-current={
+							currentPath === item.url ||
+							(item.url !== "/" && currentPath.startsWith(item.url))
+								? "page"
+								: undefined
+						}
+					>
+						{item.label}
+					</a>
+				))}
+			</nav>
+			{isLoggedIn && (
+				<a href="/_emdash/admin" class="nav-admin">Admin</a>
+			)}
+		</div>
+	</header>
+
+	<slot />
+
+	<footer class="site-footer">
+		<div class="container">
+			<div class="footer-grid">
+				<div class="footer-brand">
+					<a href="/" class="site-logo">
+						<span class="logo-dot"></span>
+						{settings.title}
+					</a>
+					<p>{settings.tagline}</p>
+				</div>
+				<div>
+					<div class="footer-col-title">Navigation</div>
+					<ul class="footer-links">
+						{footerNavMenu?.items.map(item => (
+							<li><a href={item.url}>{item.label}</a></li>
+						))}
+					</ul>
+				</div>
+				<div>
+					<div class="footer-col-title">Contact</div>
+					<ul class="footer-links">
+						{footerContactMenu?.items.map(item => (
+							<li><a href={item.url}>{item.label}</a></li>
+						))}
+					</ul>
+				</div>
+			</div>
+			<div class="footer-bottom">
+				<span>© {new Date().getFullYear()} {settings.title}</span>
+				<span>Propulsé par <a href="https://emdashcms.com" target="_blank" rel="noopener">EmDash</a></span>
+			</div>
+		</div>
+	</footer>
+
+	<EmDashBodyEnd page={pageCtx} />
+</body>
+</html>

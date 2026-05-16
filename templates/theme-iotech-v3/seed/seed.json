@@ -1,0 +1,451 @@
+{
+	"$schema": "https://emdashcms.com/seed.schema.json",
+	"version": "1",
+	"meta": {
+		"name": "IØTech",
+		"description": "Site vitrine pour IOTEC, prestataire informatique en Charente-Maritime",
+		"author": "IOTEC"
+	},
+	"settings": {
+		"title": "IØTech",
+		"tagline": "IØTech accompagne les PME de Charente-Maritime dans leur quotidien numérique."
+	},
+	"collections": [
+		{
+			"slug": "posts",
+			"label": "Articles",
+			"labelSingular": "Article",
+			"supports": ["drafts", "revisions", "search", "seo"],
+			"fields": [
+				{
+					"slug": "title",
+					"label": "Titre",
+					"type": "string",
+					"required": true,
+					"searchable": true
+				},
+				{
+					"slug": "date_publication",
+					"label": "Date de publication",
+					"type": "string"
+				},
+				{
+					"slug": "excerpt",
+					"label": "Résumé",
+					"type": "text"
+				},
+				{
+					"slug": "cover_image",
+					"label": "Image de couverture",
+					"type": "image"
+				},
+				{
+					"slug": "body",
+					"label": "Contenu",
+					"type": "portableText",
+					"searchable": true
+				}
+			]
+		},
+		{
+			"slug": "services",
+			"label": "Services",
+			"labelSingular": "Service",
+			"supports": ["drafts", "revisions", "search"],
+			"fields": [
+				{
+					"slug": "title",
+					"label": "Titre",
+					"type": "string",
+					"required": true,
+					"searchable": true
+				},
+				{
+					"slug": "excerpt",
+					"label": "Résumé",
+					"type": "text"
+				},
+				{
+					"slug": "body",
+					"label": "Contenu",
+					"type": "portableText"
+				}
+			]
+		},
+		{
+			"slug": "pages",
+			"label": "Pages",
+			"labelSingular": "Page",
+			"supports": ["drafts", "revisions"],
+			"fields": [
+				{
+					"slug": "title",
+					"label": "Titre",
+					"type": "string",
+					"required": true
+				},
+				{
+					"slug": "body",
+					"label": "Contenu",
+					"type": "portableText"
+				}
+			]
+		}
+	],
+	"menus": [
+		{
+			"slug": "header",
+			"name": "header",
+			"label": "Navigation principale",
+			"items": [
+				{
+					"label": "Accueil",
+					"url": "/",
+					"type": "custom"
+				},
+				{
+					"label": "À propos",
+					"url": "/a-propos",
+					"type": "custom"
+				},
+				{
+					"label": "Services",
+					"url": "/services",
+					"type": "custom"
+				},
+				{
+					"label": "Blog",
+					"url": "/posts",
+					"type": "custom"
+				},
+				{
+					"label": "Wiki",
+					"url": "/wiki",
+					"type": "custom"
+				},
+				{
+					"label": "Contact",
+					"url": "/contact",
+					"type": "custom"
+				}
+			]
+		},
+		{
+			"slug": "footer-nav",
+			"name": "footer-nav",
+			"label": "Navigation pied de page",
+			"items": [
+				{
+					"label": "Accueil",
+					"url": "/",
+					"type": "custom"
+				},
+				{
+					"label": "Blog",
+					"url": "/posts",
+					"type": "custom"
+				},
+				{
+					"label": "Wiki",
+					"url": "/wiki",
+					"type": "custom"
+				},
+				{
+					"label": "À propos",
+					"url": "/a-propos",
+					"type": "custom"
+				}
+			]
+		},
+		{
+			"slug": "footer-contact",
+			"name": "footer-contact",
+			"label": "Contact pied de page",
+			"items": [
+				{
+					"label": "Contact",
+					"url": "/contact",
+					"type": "custom"
+				},
+				{
+					"label": "Flux RSS",
+					"url": "/rss.xml",
+					"type": "custom"
+				}
+			]
+		}
+	],
+	"content": {
+		"services": [
+			{
+				"id": "service-creation-site",
+				"slug": "creation-site",
+				"data": {
+					"title": "Création de site web",
+					"status": "published",
+					"excerpt": "Conception de site vitrine moderne, rapide et maintenable.",
+					"body": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"children": [
+								{
+									"_type": "span",
+									"text": "Conception de site vitrine moderne, rapide et maintenable pour présenter votre activité."
+								}
+							],
+							"markDefs": []
+						}
+					]
+				}
+			},
+			{
+				"id": "service-sauvegarde",
+				"slug": "sauvegarde",
+				"data": {
+					"title": "Sauvegarde et continuité",
+					"status": "published",
+					"excerpt": "Sauvegardes automatisées et plan de reprise.",
+					"body": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"children": [
+								{
+									"_type": "span",
+									"text": "Mise en place de sauvegardes automatisées, tests de restauration et plan de reprise."
+								}
+							],
+							"markDefs": []
+						}
+					]
+				}
+			},
+			{
+				"id": "service-cybersecurite",
+				"slug": "cybersecurite",
+				"data": {
+					"title": "Cybersécurité PME",
+					"status": "published",
+					"excerpt": "Audit et durcissement pour protéger vos données.",
+					"body": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"children": [
+								{
+									"_type": "span",
+									"text": "Audit, durcissement et bonnes pratiques pour protéger vos données et vos accès critiques."
+								}
+							],
+							"markDefs": []
+						}
+					]
+				}
+			},
+			{
+				"id": "service-depannage",
+				"slug": "depannage",
+				"data": {
+					"title": "Dépannage informatique",
+					"status": "published",
+					"excerpt": "Intervention rapide sur postes et périphériques.",
+					"body": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"children": [
+								{
+									"_type": "span",
+									"text": "Intervention rapide sur postes, imprimantes, serveurs et périphériques."
+								}
+							],
+							"markDefs": []
+						}
+					]
+				}
+			},
+			{
+				"id": "service-reseau",
+				"slug": "reseau",
+				"data": {
+					"title": "Assistance réseau",
+					"status": "published",
+					"excerpt": "Installation et maintenance de votre réseau.",
+					"body": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"children": [
+								{
+									"_type": "span",
+									"text": "Installation, configuration et maintenance de votre réseau filaire et Wi-Fi."
+								}
+							],
+							"markDefs": []
+						}
+					]
+				}
+			}
+		],
+		"posts": [
+			{
+				"id": "post-cybersecurite-tpe",
+				"slug": "cybersecurite-5-reflexes-tpe",
+				"data": {
+					"title": "Cybersécurité pour les TPE : les 5 réflexes essentiels",
+					"status": "published",
+					"date_publication": "2026-04-23",
+					"excerpt": "Plus de 60 % des cyberattaques en France visent des TPE et PME.",
+					"cover_image": {
+						"id": "cover-cyber",
+						"src": "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=1200&h=675&fit=crop",
+						"alt": "Cadenas numérique représentant la cybersécurité",
+						"width": 1200,
+						"height": 675
+					},
+					"body": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"children": [
+								{
+									"_type": "span",
+									"text": "Plus de 60 % des cyberattaques en France visent des TPE et PME."
+								}
+							],
+							"markDefs": []
+						},
+						{
+							"_type": "block",
+							"style": "h2",
+							"children": [
+								{
+									"_type": "span",
+									"text": "1. Activer le 2FA"
+								}
+							],
+							"markDefs": []
+						},
+						{
+							"_type": "block",
+							"style": "normal",
+							"children": [
+								{
+									"_type": "span",
+									"text": "Le 2FA est la mesure la plus efficace contre les compromissions de comptes."
+								}
+							],
+							"markDefs": []
+						}
+					]
+				}
+			},
+			{
+				"id": "post-optimiser-pc",
+				"slug": "optimiser-pc-windows",
+				"data": {
+					"title": "Optimiser son PC Windows sans dépenser un euro",
+					"status": "published",
+					"date_publication": "2026-04-15",
+					"excerpt": "Des réglages simples pour retrouver un PC rapide.",
+					"cover_image": {
+						"id": "cover-pc",
+						"src": "https://images.unsplash.com/photo-1593642632559-0c6d3fc62b89?w=1200&h=675&fit=crop",
+						"alt": "Ordinateur portable Windows sur un bureau",
+						"width": 1200,
+						"height": 675
+					},
+					"body": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"children": [
+								{
+									"_type": "span",
+									"text": "Un PC qui ralentit n'est pas toujours en fin de vie. Quelques réglages simples font une différence notable."
+								}
+							],
+							"markDefs": []
+						}
+					]
+				}
+			},
+			{
+				"id": "post-linux-pme",
+				"slug": "linux-pour-pme",
+				"data": {
+					"title": "Passer à Linux : pourquoi et comment pour une PME",
+					"status": "published",
+					"date_publication": "2026-04-01",
+					"excerpt": "Linux n'est plus réservé aux développeurs.",
+					"cover_image": {
+						"id": "cover-linux",
+						"src": "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=1200&h=675&fit=crop",
+						"alt": "Code sur écran représentant Linux",
+						"width": 1200,
+						"height": 675
+					},
+					"body": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"children": [
+								{
+									"_type": "span",
+									"text": "Linux n'est plus réservé aux développeurs. De nombreuses PME migrent pour réduire leurs coûts."
+								}
+							],
+							"markDefs": []
+						}
+					]
+				}
+			}
+		],
+		"pages": [
+			{
+				"id": "page-a-propos",
+				"slug": "a-propos",
+				"data": {
+					"title": "À propos",
+					"status": "published",
+					"body": [
+						{
+							"_type": "block",
+							"style": "normal",
+							"children": [
+								{
+									"_type": "span",
+									"text": "IØTech est un prestataire informatique indépendant basé à Saint-Pierre-d'Oléron."
+								}
+							],
+							"markDefs": []
+						},
+						{
+							"_type": "block",
+							"style": "h2",
+							"children": [
+								{
+									"_type": "span",
+									"text": "Notre mission"
+								}
+							],
+							"markDefs": []
+						},
+						{
+							"_type": "block",
+							"style": "normal",
+							"children": [
+								{
+									"_type": "span",
+									"text": "Rendre l'informatique accessible, fiable et sécurisée pour les entreprises locales."
+								}
+							],
+							"markDefs": []
+						}
+					]
+				}
+			}
+		]
+	}
+}

@@ -1,0 +1,49 @@
+---
+import Base from "../layouts/Base.astro";
+import { getEmDashCollection } from "emdash";
+import { PortableText } from "emdash/ui";
+
+const { entries: services, cacheHint } = await getEmDashCollection("services");
+if (Astro.cache?.enabled) Astro.cache.set(cacheHint);
+
+const iconMap: Record<string, string> = {
+	"creation-site": "🌐",
+	"sauvegarde": "💾",
+	"cybersecurite": "🔒",
+	"depannage": "🔧",
+	"reseau": "📡",
+};
+---
+
+<Base title="Services" description="Découvrez tous nos services informatiques pour PME en Charente-Maritime.">
+	<div class="container">
+		<div class="page-header">
+			<h1 class="page-title">Nos services</h1>
+			<p class="page-subtitle">Une offre complète pour couvrir tous vos besoins informatiques.</p>
+		</div>
+
+		<div style="display:grid;gap:2rem">
+			{services.map(service => (
+				<div id={service.id} style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:2rem">
+					<div class="flex items-center gap-2" style="margin-bottom:1.25rem">
+						<div class="service-icon" style="width:44px;height:44px;font-size:1.2rem">
+							{iconMap[service.id] || "💻"}
+						</div>
+						<h2 style="font-size:1.1rem;font-weight:700">{service.data.title}</h2>
+					</div>
+					<div class="article-body">
+						<PortableText value={service.data.body} />
+					</div>
+				</div>
+			))}
+		</div>
+
+		<div class="section">
+			<div class="cta-section">
+				<h2>Besoin d'un devis ?</h2>
+				<p>Contactez-nous pour discuter de vos besoins.</p>
+				<a href="/contact" class="btn btn-primary">Nous contacter</a>
+			</div>
+		</div>
+	</div>
+</Base>

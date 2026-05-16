@@ -1,0 +1,82 @@
+---
+import Base from "../layouts/Base.astro";
+import PostCard from "../components/PostCard.astro";
+import ServiceCard from "../components/ServiceCard.astro";
+import { getEmDashCollection, getSiteSettings } from "emdash";
+
+const [
+	{ entries: posts, cacheHint: postsCH },
+	{ entries: services, cacheHint: servicesCH },
+	settings,
+] = await Promise.all([
+	getEmDashCollection("posts", {
+		orderBy: { published_at: "desc" },
+		limit: 3,
+	}),
+	getEmDashCollection("services"),
+	getSiteSettings(),
+]);
+
+if (Astro.cache?.enabled) Astro.cache.set(postsCH);
+if (Astro.cache?.enabled) Astro.cache.set(servicesCH);
+---
+
+<Base title={settings.title} description={settings.tagline}>
+	<section class="hero">
+		<div class="container">
+			<p class="hero-eyebrow">Prestataire informatique PME</p>
+			<h1>L'informatique de confiance<br />pour votre entreprise</h1>
+			<p class="hero-lead">{settings.tagline}</p>
+			<div class="hero-actions">
+				<a href="/contact" class="btn btn-primary">Nous contacter</a>
+				<a href="/services" class="btn btn-ghost">Voir nos services</a>
+			</div>
+			<div class="hero-meta">
+				<span>📅 Depuis 2020</span>
+				<span>📍 Saint-Pierre-d'Oléron</span>
+				<span>🗺️ Charente-Maritime</span>
+				<span>⚡ Assistance rapide</span>
+			</div>
+		</div>
+	</section>
+
+	{services.length > 0 && (
+		<section class="section">
+			<div class="container">
+				<div class="section-header">
+					<h2 class="section-title">Nos services</h2>
+					<p class="section-subtitle">Une offre complète pour couvrir tous vos besoins informatiques.</p>
+				</div>
+				<div class="services-grid">
+					{services.map(service => <ServiceCard service={service} />)}
+				</div>
+			</div>
+		</section>
+	)}
+
+	<hr class="divider" />
+
+	{posts.length > 0 && (
+		<section class="section-sm">
+			<div class="container">
+				<div class="section-header flex items-center" style="justify-content:space-between">
+					<h2 class="section-title">Actualités</h2>
+					<a href="/posts" class="btn btn-ghost" style="font-size:0.75rem">Tous les articles →</a>
+				</div>
+				<div class="posts-grid">
+					{posts.map(post => <PostCard post={post} />)}
+				</div>
+			</div>
+		</section>
+	)}
+
+	<section class="section">
+		<div class="container">
+			<div class="cta-section">
+				<h2>Un projet ? Une panne ? Une question ?</h2>
+				<p>Notre équipe est disponible pour vous répondre rapidement.</p>
+				<a href="/contact" class="btn btn-primary">Contactez-nous</a>
+			</div>
+		</div>
+	</section>
+</Base>

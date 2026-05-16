@@ -1,0 +1,166 @@
+---
+import { getMenu, getSiteSettings } from "emdash";
+import { EmDashHead, EmDashBodyStart, EmDashBodyEnd } from "emdash/ui";
+import LiveSearch from "emdash/ui/search";
+import { createPublicPageContext } from "emdash/page";
+import { Font } from "astro:assets";
+import "../styles/global.css";
+
+interface Props {
+	title?: string;
+	description?: string;
+}
+
+const { title = "", description = "" } = Astro.props;
+
+const settings = await getSiteSettings();
+
+const [headerMenu, footerNavMenu, footerContactMenu] = await Promise.all([
+	getMenu("header"),
+	getMenu("footer-nav"),
+	getMenu("footer-contact"),
+]);
+
+const pageTitle = title ? `${title} — ${settings.title}` : settings.title;
+const currentPath = Astro.url.pathname;
+
+const pageCtx = createPublicPageContext({
+	Astro,
+	kind: "custom",
+	pageType: "website",
+	title: pageTitle,
+	pageTitle: title || settings.title,
+	description: description || settings.tagline,
+	siteName: settings.title,
+});
+
+const isLoggedIn = !!Astro.locals.user;
+---
+
+<!doctype html>
+<html lang="fr">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<Font cssVariable="--font-sans" preload />
+	<Font cssVariable="--font-mono" />
+	<title>{pageTitle}</title>
+	<EmDashHead page={pageCtx} />
+	<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+	<link rel="alternate" type="application/rss+xml" title={settings.title} href="/rss.xml" />
+</head>
+<body>
+	<EmDashBodyStart page={pageCtx} />
+
+	<header class="site-header">
+		<nav class="nav">
+			<a href="/" class="site-title">{settings.title}</a>
+			<div class="nav-right">
+				<LiveSearch
+					placeholder="Rechercher…"
+					collections={["posts", "pages"]}
+					class="site-search"
+					inputClass="site-search-input"
+					resultsClass="site-search-results"
+					resultClass="site-search-result"
+					showSnippets={false}
+				/>
+				<div class="nav-links">
+					{headerMenu?.items.map(item => (
+						<a
+							href={item.url}
+							aria-current={
+								currentPath === item.url ||
+								(item.url !== "/" && currentPath.startsWith(item.url))
+									? "page"
+									: undefined
+							}
+						>
+							{item.label}
+						</a>
+					))}
+				</div>
+				{isLoggedIn && (
+					<a href="/_emdash/admin" class="nav-admin">Admin</a>
+				)}
+			</div>
+		</nav>
+	</header>
+
+	<main>
+		<slot />
+	</main>
+
+	<footer class="site-footer">
+		<div class="footer-inner">
+			<div class="footer-grid">
+				<div class="footer-brand">
+					<a href="/" class="footer-logo">{settings.title}</a>
+					<p class="footer-tagline">{settings.tagline}</p>
+				</div>
+				<div class="footer-nav">
+					<h4 class="footer-heading">Navigation</h4>
+					<ul class="footer-links">
+						{footerNavMenu?.items.map(item => (
+							<li><a href={item.url}>{item.label}</a></li>
+						))}
+					</ul>
+				</div>
+				<div class="footer-nav">
+					<h4 class="footer-heading">Contact</h4>
+					<ul class="footer-links">
+						{footerContactMenu?.items.map(item => (
+							<li><a href={item.url}>{item.label}</a></li>
+						))}
+					</ul>
+				</div>
+			</div>
+			<div class="footer-bottom">
+				<p class="footer-copyright">
+					Powered by <a href="https://emdashcms.com" target="_blank" rel="noopener">EmDash</a>
+				</p>
+				<div class="theme-switcher" role="group" aria-label="Choisir le thème">
+					<button type="button" class="theme-btn" data-theme="light" aria-label="Light mode">
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+					</button>
+					<button type="button" class="theme-btn" data-theme="dark" aria-label="Dark mode">
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+					</button>
+					<button type="button" class="theme-btn" data-theme="system" aria-label="System theme">
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+					</button>
+				</div>
+			</div>
+		</div>
+	</footer>
+
+	<EmDashBodyEnd page={pageCtx} />
+
+	<script>
+		const STORAGE_KEY = "iotech-theme";
+
+		function applyTheme(theme: string) {
+			const root = document.documentElement;
+			root.classList.remove("light", "dark");
+			if (theme === "light") root.classList.add("light");
+			else if (theme === "dark") root.classList.add("dark");
+
+			document.querySelectorAll<HTMLButtonElement>(".theme-btn").forEach(btn => {
+				const active = btn.dataset.theme === theme;
+				btn.classList.toggle("active", active);
+			});
+		}
+
+		const saved = localStorage.getItem(STORAGE_KEY) || "system";
+		applyTheme(saved);
+
+		document.querySelectorAll<HTMLButtonElement>(".theme-btn").forEach(btn => {
+			btn.addEventListener("click", () => {
+				const theme = btn.dataset.theme || "system";
+				localStorage.setItem(STORAGE_KEY, theme);
+				applyTheme(theme);
+			});
+		});
+	</script>
+</body>
+</html>
