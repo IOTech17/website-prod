@@ -9,8 +9,8 @@
  */
 
 import { readFileSync, existsSync } from "fs";
-import { fileURLToPath } from "url";
 import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -29,6 +29,7 @@ const SHARED_FILES = [
 	"src/pages/posts/[slug].astro",
 	"src/pages/wiki/index.astro",
 	"src/pages/wiki/[...path].astro",
+	"src/pages/wiki/rss.xml.ts",
 	"src/pages/rss.xml.ts",
 	"src/utils/wiki-tree.ts",
 ];
@@ -109,14 +110,18 @@ for (const themeDir of [V3, CF]) {
 		if (menuNames.includes(required)) {
 			console.log(`  ${green("OK")}       ${themeName}: menu name "${required}" ✓`);
 		} else {
-			console.log(`  ${red("MISSING")}  ${themeName}: menu name "${required}" — found: [${menuNames.join(", ")}]`);
+			console.log(
+				`  ${red("MISSING")}  ${themeName}: menu name "${required}" — found: [${menuNames.join(", ")}]`,
+			);
 			seedErrors++;
 		}
 	}
 
 	for (const menu of menus) {
 		if (!slugPattern.test(menu.name ?? "")) {
-			console.log(`  ${red("BAD")}      ${themeName}: menu name "${menu.name}" is not a slug — getMenu() will fail`);
+			console.log(
+				`  ${red("BAD")}      ${themeName}: menu name "${menu.name}" is not a slug — getMenu() will fail`,
+			);
 			seedErrors++;
 		}
 	}

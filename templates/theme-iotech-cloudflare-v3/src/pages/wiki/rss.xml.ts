@@ -65,8 +65,8 @@ export const GET: APIRoute = async ({ url, site }) => {
 			return `
   <item>
     <title>${esc(note.title)}</title>
-    <link>${link}</link>
-    <guid isPermaLink="true">${link}</guid>
+    <link>${esc(link)}</link>
+    <guid isPermaLink="true">${esc(link)}</guid>
     <pubDate>${new Date(note.updatedAt).toUTCString()}</pubDate>
     <description>${esc(excerpt)}</description>
     ${categories}

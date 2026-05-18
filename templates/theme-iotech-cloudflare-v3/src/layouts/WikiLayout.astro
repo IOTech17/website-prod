@@ -14,6 +14,7 @@ interface Props {
 }
 
 const { title, description, tree, currentPath = "", totalNotes, wikiSlug = "wiki", isAdmin = false } = Astro.props;
+const wikiApiKey = import.meta.env.WIKI_API_KEY || "";
 ---
 
 <Base title={title} description={description}>
@@ -95,10 +96,15 @@ const { title, description, tree, currentPath = "", totalNotes, wikiSlug = "wiki
 	</div>
 </Base>
 
-<script define:vars={{ wikiSlug }}>
+<script define:vars={{ wikiSlug, isAdmin, wikiApiKey: isAdmin ? wikiApiKey : "" }}>
 	const RE_MD_EXT_I = /\.md$/i;
 	const RE_SLUG_SEPS = /[-_]/g;
 	const RE_TRAILING_SLASHES = /\/+$/;
+	const RE_ESC_AMP = /&/g, RE_ESC_LT = /</g, RE_ESC_GT = />/g, RE_ESC_QUOT = /"/g;
+
+	function esc(s) {
+		return String(s).replace(RE_ESC_AMP, "&amp;").replace(RE_ESC_LT, "&lt;").replace(RE_ESC_GT, "&gt;").replace(RE_ESC_QUOT, "&quot;");
+	}
 
 	function encodeWikiPath(path) {
 		return path.split("/").map(s => encodeURIComponent(s)).join("/");
@@ -108,6 +114,7 @@ const { title, description, tree, currentPath = "", totalNotes, wikiSlug = "wiki
 	const input = document.getElementById("wiki-search");
 	const results = document.getElementById("wiki-search-results");
 	let searchTimer;
+	const searchHeaders = wikiApiKey ? { "X-Wiki-Key": wikiApiKey } : {};
 
 	input?.addEventListener("input", e => {
 		clearTimeout(searchTimer);
@@ -115,7 +122,7 @@ const { title, description, tree, currentPath = "", totalNotes, wikiSlug = "wiki
 		if (!q) { results.innerHTML = ""; results.hidden = true; return; }
 		searchTimer = setTimeout(async () => {
 			try {
-				const res = await fetch(`/_emdash/api/plugins/markdown-wiki/search?q=${encodeURIComponent(q)}&limit=10`);
+				const res = await fetch(`/_emdash/api/plugins/markdown-wiki/search?q=${encodeURIComponent(q)}&limit=10`, { headers: searchHeaders });
 				const data = await res.json();
 				const items = data?.data?.results || data?.results || [];
 				if (!items.length) {
@@ -123,8 +130,8 @@ const { title, description, tree, currentPath = "", totalNotes, wikiSlug = "wiki
 				} else {
 					results.innerHTML = items.map(r => `
 						<a href="/${wikiSlug}/${encodeWikiPath(r.path)}" class="wiki-search-result">
-							<span class="wiki-search-title">${r.title}</span>
-							<span class="wiki-search-path">${r.path}</span>
+							<span class="wiki-search-title">${esc(r.title)}</span>
+							<span class="wiki-search-path">${esc(r.path)}</span>
 						</a>
 					`).join("");
 				}
@@ -181,7 +188,7 @@ const { title, description, tree, currentPath = "", totalNotes, wikiSlug = "wiki
 		try {
 			const res = await fetch("/_emdash/api/plugins/markdown-wiki/notes/create", {
 				method: "POST",
-				headers: { "Content-Type": "application/json", "X-EmDash-Request": "1" },
+				headers: { "Content-Type": "application/json", "X-EmDash-Request": "1", ...searchHeaders },
 				body: JSON.stringify({ path, content: `# ${title}\n\n`, visibility: "public" }),
 			});
 			if (!res.ok) {
@@ -249,7 +256,7 @@ const { title, description, tree, currentPath = "", totalNotes, wikiSlug = "wiki
 		try {
 			const res = await fetch("/_emdash/api/plugins/markdown-wiki/notes/create", {
 				method: "POST",
-				headers: { "Content-Type": "application/json", "X-EmDash-Request": "1" },
+				headers: { "Content-Type": "application/json", "X-EmDash-Request": "1", ...searchHeaders },
 				body: JSON.stringify({
 					path: readmePath,
 					content: `# ${title}\n\nNotes dans ce dossier.\n`,

@@ -4,7 +4,8 @@ import { buildTree, countNotes } from "../../utils/wiki-tree.ts";
 import type { NoteEntry } from "../../utils/wiki-tree.ts";
 
 const WIKI_SLUG = "wiki";
-const isAdmin = !!(Astro.locals as any).user;
+const _user = (Astro.locals as any).user;
+const isAdmin = !!(_user && _user.role >= 50);
 
 const wikiApiKey = import.meta.env.WIKI_API_KEY || "";
 const authHeaders: Record<string, string> = isAdmin && wikiApiKey

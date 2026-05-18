@@ -13,6 +13,8 @@
  * Exit 0 = all checks passed. Exit 1 = one or more failures.
  */
 
+const RE_STYLESHEET = /<link[^>]+\.css/;
+
 const BASE_URL = (
 	process.argv.find((a) => a.startsWith("http")) ||
 	process.env.BASE_URL ||
@@ -71,14 +73,6 @@ function hasText(text, needle, label) {
 	}
 }
 
-function statusIs(res, expected, label) {
-	if (res.status === expected) {
-		ok(label);
-	} else {
-		fail(label, `got ${res.status}, expected ${expected}`);
-	}
-}
-
 // ─── sections ──────────────────────────────────────────────────────────────────
 
 async function checkPages() {
@@ -107,7 +101,10 @@ async function checkNavigation() {
 	console.log(bold("\n  Navigation (menu seeded correctly)"));
 
 	const r = await get("/");
-	if (!r.ok) { warn("Skipping nav checks — homepage unavailable"); return; }
+	if (!r.ok) {
+		warn("Skipping nav checks — homepage unavailable");
+		return;
+	}
 
 	// These nav links must appear in the HTML — confirms menus are seeded with correct `name` column
 	const links = [
@@ -131,7 +128,10 @@ async function checkRss() {
 	console.log(bold("\n  RSS"));
 
 	const r = await get("/rss.xml");
-	if (!r.ok) { fail("RSS feed", `HTTP ${r.status}`); return; }
+	if (!r.ok) {
+		fail("RSS feed", `HTTP ${r.status}`);
+		return;
+	}
 	ok("RSS feed returns 200");
 
 	if (r.headers.get("content-type")?.includes("xml")) {
@@ -149,7 +149,10 @@ async function checkWiki() {
 
 	// Public wiki index
 	const idx = await get("/wiki");
-	if (!idx.ok) { fail("Wiki index", `HTTP ${idx.status}`); return; }
+	if (!idx.ok) {
+		fail("Wiki index", `HTTP ${idx.status}`);
+		return;
+	}
 	ok("Wiki index → 200");
 
 	// Plugin API (public list endpoint — should return JSON, not 404/500)
@@ -202,7 +205,12 @@ async function checkSecurity() {
 
 	// Admin routes require auth
 	const admin = await get("/_emdash/admin", { redirect: "manual", noBody: true });
-	if (admin.status === 302 || admin.status === 301 || admin.status === 401 || admin.status === 403) {
+	if (
+		admin.status === 302 ||
+		admin.status === 301 ||
+		admin.status === 401 ||
+		admin.status === 403
+	) {
 		ok("Admin protected (redirects or 401/403)");
 	} else if (admin.status === 200) {
 		// Check if it's a login page rather than actual admin
@@ -227,7 +235,10 @@ async function checkSecurity() {
 	// Wiki API key rejection — wrong key must return 401
 	const badKey = await get("/_emdash/api/plugins/markdown-wiki/sync", {
 		method: "POST",
-		headers: { "X-Wiki-Key": "invalid-key-that-should-be-rejected", "content-type": "application/json" },
+		headers: {
+			"X-Wiki-Key": "invalid-key-that-should-be-rejected",
+			"content-type": "application/json",
+		},
 		body: JSON.stringify({}),
 		noBody: true,
 	});
@@ -258,7 +269,10 @@ async function checkAssets() {
 	console.log(bold("\n  Assets"));
 
 	const r = await get("/");
-	if (!r.ok) { warn("Skipping asset checks — homepage unavailable"); return; }
+	if (!r.ok) {
+		warn("Skipping asset checks — homepage unavailable");
+		return;
+	}
 
 	// favicon
 	const favicon = await get("/favicon.svg", { noBody: true });
@@ -269,7 +283,7 @@ async function checkAssets() {
 	}
 
 	// Check that CSS loads (look for a <link> tag pointing to a .css file)
-	const hasStylesheet = /<link[^>]+\.css/.test(r.text);
+	const hasStylesheet = RE_STYLESHEET.test(r.text);
 	if (hasStylesheet) {
 		ok("Stylesheet link present in HTML");
 	} else {
@@ -299,7 +313,9 @@ const statusLine = [
 	passed > 0 ? green(`${passed} passed`) : null,
 	warned > 0 ? yellow(`${warned} warnings`) : null,
 	failed > 0 ? red(`${failed} failed`) : null,
-].filter(Boolean).join("  ");
+]
+	.filter(Boolean)
+	.join("  ");
 
 console.log(`  ${statusLine}  ${dim(`(${total} checks)`)}`);
 console.log();

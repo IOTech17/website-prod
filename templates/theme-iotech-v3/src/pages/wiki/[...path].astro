@@ -4,7 +4,8 @@ import { buildTree, countNotes, getSiblings } from "../../utils/wiki-tree.ts";
 import type { NoteEntry } from "../../utils/wiki-tree.ts";
 
 const WIKI_SLUG = "wiki";
-const isAdmin = !!(Astro.locals as any).user;
+const _user = (Astro.locals as any).user;
+const isAdmin = !!(_user && _user.role >= 50);
 
 const wikiApiKey = import.meta.env.WIKI_API_KEY || "";
 const authHeaders: Record<string, string> = isAdmin && wikiApiKey
@@ -13,7 +14,11 @@ const authHeaders: Record<string, string> = isAdmin && wikiApiKey
 
 const pathParam = Astro.params.path;
 const notePath = Array.isArray(pathParam) ? pathParam.join("/") : (pathParam || "");
-const decodedPath = decodeURIComponent(notePath);
+// Astro already percent-decodes path params; re-decoding would throw on bare % chars.
+let decodedPath: string;
+try { decodedPath = decodeURIComponent(notePath); } catch { decodedPath = notePath; }
+if (!decodedPath || decodedPath.startsWith("/") || decodedPath.split("/").some(s => s === ".."))
+	return Astro.redirect("/404");
 
 let allNotes: NoteEntry[] = [];
 try {
@@ -80,7 +85,8 @@ const RE_LINK       = /\[([^\]]+)\]\(([^)]+)\)/g;
 const IMAGE_EXTS    = /\.(png|jpe?g|gif|webp|svg|avif|bmp|tiff)$/i;
 const RE_PARAGRAPH  = /^(?!<[a-z]|%%)(.*\S.*)$/gm;
 const RE_XML_QUOT   = /"/g;
-const RE_JS_HREF    = /^javascript:/i;
+const RE_SAFE_HREF  = /^(https?:|mailto:|\/|#|\.\/|\.\.\/)/i;
+const RE_SAFE_SRC   = /^(https?:|\/)/i;
 const RE_ENT_AMP    = /&amp;/g;
 const RE_ENT_LT     = /&lt;/g;
 const RE_ENT_GT     = /&gt;/g;
@@ -104,17 +110,19 @@ function fmtDate(iso: string) {
 // Markdown → HTML (server-side, Web APIs only)
 function mdToHtml(md: string): string {
 	if (!md) return "";
+	// Per-call nonce prevents user-authored %%CODE0%% literals from colliding with placeholders.
+	const N = Math.random().toString(36).slice(2);
 	const codeBlocks: string[] = [];
 	let out = md.replace(RE_CODE_BLOCK, (_, lang, code) => {
 		const safe = code.replace(RE_XML_AMP, "&amp;").replace(RE_XML_LT, "&lt;").replace(RE_XML_GT, "&gt;");
 		codeBlocks.push(`<pre class="md-pre"><code class="language-${esc(lang || "text")}">${safe}</code></pre>`);
-		return `%%CODE${codeBlocks.length - 1}%%`;
+		return `%%CODE_${N}_${codeBlocks.length - 1}%%`;
 	});
 	const inlines: string[] = [];
 	out = out.replace(RE_INLINE_CODE, (_, c) => {
 		const safe = c.replace(RE_XML_AMP, "&amp;").replace(RE_XML_LT, "&lt;").replace(RE_XML_GT, "&gt;");
 		inlines.push(`<code class="md-code">${safe}</code>`);
-		return `%%INLINE${inlines.length - 1}%%`;
+		return `%%INLINE_${N}_${inlines.length - 1}%%`;
 	});
 	// Convert Obsidian wiki embeds ![[file.ext]] / ![[file.ext|alias]] before
 	// the generic image pass. Images render as <img>; other files as download links.
@@ -130,15 +138,17 @@ function mdToHtml(md: string): string {
 	// individually while preserving the Markdown structure of the rest of the doc.
 	const images: string[] = [];
 	out = out.replace(RE_IMAGE, (_, alt, src) => {
-		images.push(`<img src="${esc(src.trim())}" alt="${esc(alt)}" class="md-img">`);
-		return `%%IMG${images.length - 1}%%`;
+		const s = src.trim();
+		if (!RE_SAFE_SRC.test(s)) return esc(alt);
+		images.push(`<img src="${esc(s)}" alt="${esc(alt)}" class="md-img">`);
+		return `%%IMG_${N}_${images.length - 1}%%`;
 	});
 	const links: string[] = [];
 	out = out.replace(RE_LINK, (_, text, href) => {
 		const h = href.trim();
-		if (RE_JS_HREF.test(h)) return esc(text);
+		if (!RE_SAFE_HREF.test(h)) return esc(text);
 		links.push(`<a href="${esc(h)}" class="md-link">${esc(text)}</a>`);
-		return `%%LINK${links.length - 1}%%`;
+		return `%%LINK_${N}_${links.length - 1}%%`;
 	});
 	// HTML-escape remaining Markdown source so headings, list items, table cells,
 	// blockquotes, and paragraphs cannot inject raw HTML.
@@ -180,11 +190,10 @@ function mdToHtml(md: string): string {
 	out = out.replace(RE_ITALIC, "<em>$1</em>");
 	out = out.replace(RE_STRIKE, "<del>$1</del>");
 	out = out.replace(RE_PARAGRAPH, "<p>$1</p>");
-	codeBlocks.forEach((b, i) => { out = out.replace(`%%CODE${i}%%`, b); });
-	inlines.forEach((b, i) => { out = out.replace(`%%INLINE${i}%%`, b); });
-	// Restore links first, then images — images may appear inside link text (%%IMGn%%)
-	links.forEach((b, i) => { out = out.replace(`%%LINK${i}%%`, b); });
-	images.forEach((b, i) => { out = out.replace(`%%IMG${i}%%`, b); });
+	codeBlocks.forEach((b, i) => { out = out.replace(`%%CODE_${N}_${i}%%`, b); });
+	inlines.forEach((b, i) => { out = out.replace(`%%INLINE_${N}_${i}%%`, b); });
+	links.forEach((b, i) => { out = out.replace(`%%LINK_${N}_${i}%%`, b); });
+	images.forEach((b, i) => { out = out.replace(`%%IMG_${N}_${i}%%`, b); });
 	return out;
 }
 
@@ -567,6 +576,23 @@ if (isAdmin) {
 	saveBtns.forEach(b => b.addEventListener("click", save));
 	cancelBtns.forEach(b => b.addEventListener("click", exitEdit));
 	moveBtn?.addEventListener("click", doMove);
+
+	async function doDelete() {
+		if (!confirm(`Supprimer définitivement "${notePath}" ?`)) return;
+		try {
+			const res = await fetch("/_emdash/api/plugins/markdown-wiki/notes/delete", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "X-EmDash-Request": "1", ...(wikiApiKey ? { "X-Wiki-Key": wikiApiKey } : {}) },
+				body: JSON.stringify({ path: notePath }),
+			});
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err?.error?.message || `Erreur ${res.status}`);
+			}
+			window.location.href = `/${wikiSlug}`;
+		} catch (e) { alert("Erreur lors de la suppression : " + e.message); }
+	}
+
 	deleteBtn?.addEventListener("click", doDelete);
 
 	// Auto-edit si ?edit=1 dans l'URL (après création d'une note)
@@ -574,22 +600,6 @@ if (isAdmin) {
 		enterEdit();
 		history.replaceState(null, "", window.location.pathname);
 	}
-}
-
-async function doDelete() {
-	if (!confirm(`Supprimer définitivement "${notePath}" ?`)) return;
-	try {
-		const res = await fetch("/_emdash/api/plugins/markdown-wiki/notes/delete", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", "X-EmDash-Request": "1", ...(wikiApiKey ? { "X-Wiki-Key": wikiApiKey } : {}) },
-			body: JSON.stringify({ path: notePath }),
-		});
-		if (!res.ok) {
-			const err = await res.json().catch(() => ({}));
-			throw new Error(err?.error?.message || `Erreur ${res.status}`);
-		}
-		window.location.href = `/${wikiSlug}`;
-	} catch (e) { alert("Erreur lors de la suppression : " + e.message); }
 }
 </script>
 

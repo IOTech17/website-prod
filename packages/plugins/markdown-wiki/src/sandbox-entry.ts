@@ -429,21 +429,20 @@ export default definePlugin({
 			},
 		},
 
-		// GET /history?path=...
+		// GET /history?path=... — requires API key; history may contain old private revisions
 		history: {
 			public: true,
 			handler: async (routeCtx: { request: Request }, ctx: PluginContext) => {
+				const storage = ctx.storage as unknown as Storage;
+				const authenticated = await checkApiKey(routeCtx.request, storage);
+				if (!authenticated) throw PluginRouteError.unauthorized("API key required");
+
 				const url = new URL(routeCtx.request.url);
 				const path = url.searchParams.get("path");
 				if (!path) throw PluginRouteError.badRequest("path is required");
-				const storage = ctx.storage as unknown as Storage;
 
 				const noteResult = await storage.notes.query({ where: { path } });
 				if (!noteResult.items[0]) throw PluginRouteError.notFound("Note not found");
-				if (noteResult.items[0].data.visibility !== "public") {
-					const authenticated = await checkApiKey(routeCtx.request, storage);
-					if (!authenticated) throw PluginRouteError.notFound("Note not found");
-				}
 
 				const result = await storage.history.query({
 					where: { notePath: path },
@@ -468,6 +467,7 @@ export default definePlugin({
 				const limit = Math.min(Number(url.searchParams.get("limit") || 200), 500);
 
 				const result = await storage.notes.query({ orderBy: { updatedAt: "desc" }, limit: 5000 });
+				const poolTruncated = result.hasMore === true;
 				let notes = result.items.map((i) => ({ id: i.id, ...i.data }));
 
 				if (since) {
@@ -476,7 +476,13 @@ export default definePlugin({
 						notes = notes.filter((n) => new Date(n.updatedAt).getTime() > sinceMs);
 				}
 
-				return { notes: notes.slice(0, limit), total: notes.length, since };
+				const page = notes.slice(0, limit);
+				return {
+					notes: page,
+					total: notes.length,
+					since,
+					truncated: poolTruncated || notes.length > limit,
+				};
 			},
 		},
 
@@ -691,7 +697,8 @@ export default definePlugin({
 					// Rewrite Obsidian image/file links to stable EmDash media URLs
 					const content = rewriteObsidianLinks(n.content, attachByPath, attachByFilename);
 					try {
-						const existingResult = (await storage.notes.query({ where: { path: n.path } })).items[0];
+						const existingResult = (await storage.notes.query({ where: { path: n.path } }))
+							.items[0];
 						if (existingResult) {
 							const u: WikiNote = {
 								...existingResult.data,
@@ -730,15 +737,19 @@ export default definePlugin({
 						throw PluginRouteError.badRequest("delete_paths too large — max 200 per request");
 					for (const path of delete_paths) {
 						if (!path) continue;
-						const toDelete = (await storage.notes.query({ where: { path } })).items[0];
-						if (toDelete) {
-							// Delete index and history first — mirrors notes/delete ordering
-							const tokens = await storage.search_index.query({ where: { notePath: path } });
-							for (const t of tokens.items) await storage.search_index.delete(t.id);
-							const hist = await storage.history.query({ where: { notePath: path } });
-							for (const h of hist.items) await storage.history.delete(h.id);
-							await storage.notes.delete(toDelete.id);
-							deleted++;
+						try {
+							const toDelete = (await storage.notes.query({ where: { path } })).items[0];
+							if (toDelete) {
+								// Delete index and history first — mirrors notes/delete ordering
+								const tokens = await storage.search_index.query({ where: { notePath: path } });
+								for (const t of tokens.items) await storage.search_index.delete(t.id);
+								const hist = await storage.history.query({ where: { notePath: path } });
+								for (const h of hist.items) await storage.history.delete(h.id);
+								await storage.notes.delete(toDelete.id);
+								deleted++;
+							}
+						} catch (err) {
+							ctx.log.error(`[markdown-wiki] Sync delete failed for ${path}: ${err}`);
 						}
 					}
 				}
@@ -782,12 +793,22 @@ export default definePlugin({
 				if (!data) throw PluginRouteError.badRequest("data field required (base64-encoded bytes)");
 
 				const trimmedPath = path.trim();
-				if (trimmedPath.length > 512 || trimmedPath.includes("\0") || RE_INVALID_PATH_CHARS.test(trimmedPath))
+				if (
+					trimmedPath.length > 512 ||
+					trimmedPath.includes("\0") ||
+					RE_INVALID_PATH_CHARS.test(trimmedPath)
+				)
 					throw PluginRouteError.badRequest("invalid path — max 512 chars, no control characters");
 
 				const trimmedFilename = filename.trim();
-				if (trimmedFilename.length > 255 || trimmedFilename.includes("/") || [...trimmedFilename].some(c => c.charCodeAt(0) < 0x20))
-					throw PluginRouteError.badRequest("invalid filename — must be a basename, max 255 chars, no control characters");
+				if (
+					trimmedFilename.length > 255 ||
+					trimmedFilename.includes("/") ||
+					[...trimmedFilename].some((c) => c.charCodeAt(0) < 0x20)
+				)
+					throw PluginRouteError.badRequest(
+						"invalid filename — must be a basename, max 255 chars, no control characters",
+					);
 
 				if (!ALLOWED_MIME_TYPES.has(mimeType))
 					throw PluginRouteError.badRequest(`unsupported file type: ${mimeType}`);
@@ -833,7 +854,9 @@ export default definePlugin({
 				const recordId = await pathToId(trimmedPath);
 				await storage.attachments.put(recordId, attachment);
 
-				ctx.log.info(`[markdown-wiki] Attachment uploaded: ${trimmedPath} (${bytes.byteLength} bytes)`);
+				ctx.log.info(
+					`[markdown-wiki] Attachment uploaded: ${trimmedPath} (${bytes.byteLength} bytes)`,
+				);
 				return { path: trimmedPath, url, mediaId, size: bytes.byteLength };
 			},
 		},
@@ -1119,7 +1142,8 @@ export default definePlugin({
 							notes.length === 0
 								? {
 										type: "section",
-										label: "Aucune note publiée. Créez votre première note ou synchronisez depuis Obsidian.",
+										label:
+											"Aucune note publiée. Créez votre première note ou synchronisez depuis Obsidian.",
 									}
 								: {
 										type: "table",

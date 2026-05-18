@@ -11,8 +11,8 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { fileURLToPath } from "url";
 import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 
 const dry = process.argv.includes("--dry");
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -32,6 +32,7 @@ const SHARED_FILES = [
 	"src/pages/posts/[slug].astro",
 	"src/pages/wiki/index.astro",
 	"src/pages/wiki/[...path].astro",
+	"src/pages/wiki/rss.xml.ts",
 	"src/pages/rss.xml.ts",
 	"src/utils/wiki-tree.ts",
 ];
@@ -47,7 +48,9 @@ const dim = (s) => `\x1b[2m${s}\x1b[0m`;
 
 const label = dry ? "DRY RUN — " : "";
 console.log(bold(`\n╔══════════════════════════════════════════════════╗`));
-console.log(bold(`║  ${label}Sync Themes — v3 → cloudflare-v3${" ".repeat(Math.max(0, 16 - label.length))}║`));
+console.log(
+	bold(`║  ${label}Sync Themes — v3 → cloudflare-v3${" ".repeat(Math.max(0, 16 - label.length))}║`),
+);
 console.log(bold(`╚══════════════════════════════════════════════════╝\n`));
 
 let copied = 0;
