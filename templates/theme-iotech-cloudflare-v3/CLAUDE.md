@@ -3,7 +3,13 @@ This is an EmDash site -- a CMS built on Astro with a full admin UI.
 ## Commands
 
 ```bash
+# Dev (local, requires .dev.vars with WIKI_API_KEY)
 npx emdash dev
+
+# Build + deploy to Cloudflare Workers
+pnpm deploy   # = astro build && wrangler deploy
+
+# Types
 npx emdash types
 ```
 
