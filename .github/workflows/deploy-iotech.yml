@@ -54,3 +54,6 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: pnpm --filter @iotech/theme-iotech-cloudflare run deploy
+
+      - name: Smoke test production
+        run: node templates/theme-iotech-cloudflare-v3/smoke-test.mjs https://website-prod.i0tech.workers.dev

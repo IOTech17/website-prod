@@ -74,16 +74,68 @@ for (const f of SHARED_FILES) {
 	}
 }
 
+// ─── seed.json menu name validation ────────────────────────────────────────────
+
+console.log(bold("\n╔══════════════════════════════════════════════════╗"));
+console.log(bold("║  Seed Validation — menu names are slugs          ║"));
+console.log(bold("╚══════════════════════════════════════════════════╝\n"));
+
+let seedErrors = 0;
+
+const REQUIRED_MENU_NAMES = ["header", "footer-nav", "footer-contact"];
+
+for (const themeDir of [V3, CF]) {
+	const themeName = themeDir === V3 ? "theme-iotech-v3" : "theme-iotech-cloudflare-v3";
+	const seedPath = resolve(themeDir, "seed/seed.json");
+	if (!existsSync(seedPath)) {
+		console.log(`  ${yellow("SKIP")}     seed.json not found in ${themeName}`);
+		continue;
+	}
+
+	let seed;
+	try {
+		seed = JSON.parse(readFileSync(seedPath, "utf8"));
+	} catch {
+		console.log(`  ${red("ERROR")}    Failed to parse seed.json in ${themeName}`);
+		seedErrors++;
+		continue;
+	}
+
+	const menus = seed.menus ?? [];
+	const menuNames = menus.map((m) => m.name);
+	const slugPattern = /^[a-z][a-z0-9-]*$/;
+
+	for (const required of REQUIRED_MENU_NAMES) {
+		if (menuNames.includes(required)) {
+			console.log(`  ${green("OK")}       ${themeName}: menu name "${required}" ✓`);
+		} else {
+			console.log(`  ${red("MISSING")}  ${themeName}: menu name "${required}" — found: [${menuNames.join(", ")}]`);
+			seedErrors++;
+		}
+	}
+
+	for (const menu of menus) {
+		if (!slugPattern.test(menu.name ?? "")) {
+			console.log(`  ${red("BAD")}      ${themeName}: menu name "${menu.name}" is not a slug — getMenu() will fail`);
+			seedErrors++;
+		}
+	}
+}
+
+// ─── summary ───────────────────────────────────────────────────────────────────
+
 console.log();
-if (diffs === 0 && missing === 0) {
-	console.log(bold(green(`✓ All ${SHARED_FILES.length} shared files are identical.\n`)));
+const totalErrors = diffs + missing + seedErrors;
+if (totalErrors === 0) {
+	console.log(bold(green(`✓ All ${SHARED_FILES.length} shared files identical. Seed valid.\n`)));
 	process.exit(0);
 } else {
 	if (missing > 0) console.log(red(`✗ ${missing} file(s) missing`));
 	if (diffs > 0) {
 		console.log(red(`✗ ${diffs} file(s) differ`));
-		console.log(yellow("  Run: cp templates/theme-iotech-v3/<file> templates/theme-iotech-cloudflare-v3/<file>"));
+		console.log(yellow("  Run: node templates/theme-iotech-cloudflare-v3/sync-themes.mjs"));
 	}
+	if (seedErrors > 0) console.log(red(`✗ ${seedErrors} seed issue(s) — fix seed.json menu names`));
 	console.log();
 	process.exit(1);
 }
