@@ -1043,26 +1043,22 @@ export default definePlugin({
 							{
 								type: "columns",
 								columns: [
-									{
-										blocks: [{ type: "header", text: "📖 Wiki — Gestion des notes" }],
-									},
-									{
-										blocks: [
-											{
-												type: "actions",
-												elements: [
-													{
-														type: "button",
-														text: "➕ Nouvelle note",
-														action_id: "nav_create",
-														style: "primary",
-													},
-													{ type: "button", text: "📎 Fichiers", action_id: "nav_attachments" },
-													{ type: "button", text: "⚙️ Config API", action_id: "nav_config" },
-												],
-											},
-										],
-									},
+									[{ type: "header", text: "📖 Wiki — Gestion des notes" }],
+									[
+										{
+											type: "actions",
+											elements: [
+												{
+													type: "button",
+													text: "➕ Nouvelle note",
+													action_id: "nav_create",
+													style: "primary",
+												},
+												{ type: "button", text: "📎 Fichiers", action_id: "nav_attachments" },
+												{ type: "button", text: "⚙️ Config API", action_id: "nav_config" },
+											],
+										},
+									],
 								],
 							},
 							{ type: "divider" },
@@ -1623,17 +1619,15 @@ export default definePlugin({
 							{
 								type: "columns",
 								columns: [
-									{ blocks: [{ type: "header", text: "📎 Fichiers attachés" }] },
-									{
-										blocks: [
-											{
-												type: "actions",
-												elements: [
-													{ type: "button", text: "← Retour aux notes", action_id: "nav_list" },
-												],
-											},
-										],
-									},
+									[{ type: "header", text: "📎 Fichiers attachés" }],
+									[
+										{
+											type: "actions",
+											elements: [
+												{ type: "button", text: "← Retour aux notes", action_id: "nav_list" },
+											],
+										},
+									],
 								],
 							},
 							{ type: "divider" },
