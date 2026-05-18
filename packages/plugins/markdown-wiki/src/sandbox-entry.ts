@@ -960,7 +960,7 @@ export default definePlugin({
 								elements: [
 									{
 										type: "button",
-										text: keyEntry ? "🔄 Régénérer la clé" : "🔑 Générer une clé API",
+										label: keyEntry ? "🔄 Régénérer la clé" : "🔑 Générer une clé API",
 										action_id: "do_rotate_key",
 										style: keyEntry ? "danger" : "primary",
 										...(keyEntry
@@ -974,7 +974,7 @@ export default definePlugin({
 												}
 											: {}),
 									},
-									{ type: "button", text: "← Retour", action_id: "nav_list" },
+									{ type: "button", label: "← Retour", action_id: "nav_list" },
 								],
 							},
 						],
@@ -1011,8 +1011,8 @@ export default definePlugin({
 							{
 								type: "actions",
 								elements: [
-									{ type: "button", text: "← Retour à la configuration", action_id: "nav_config" },
-									{ type: "button", text: "📋 Liste des notes", action_id: "nav_list" },
+									{ type: "button", label: "← Retour à la configuration", action_id: "nav_config" },
+									{ type: "button", label: "📋 Liste des notes", action_id: "nav_list" },
 								],
 							},
 						],
@@ -1050,12 +1050,12 @@ export default definePlugin({
 											elements: [
 												{
 													type: "button",
-													text: "➕ Nouvelle note",
+													label: "➕ Nouvelle note",
 													action_id: "nav_create",
 													style: "primary",
 												},
-												{ type: "button", text: "📎 Fichiers", action_id: "nav_attachments" },
-												{ type: "button", text: "⚙️ Config API", action_id: "nav_config" },
+												{ type: "button", label: "📎 Fichiers", action_id: "nav_attachments" },
+												{ type: "button", label: "⚙️ Config API", action_id: "nav_config" },
 											],
 										},
 									],
@@ -1065,7 +1065,7 @@ export default definePlugin({
 							notes.length === 0
 								? {
 										type: "section",
-										text: "Aucune note publiée. Créez votre première note ou synchronisez depuis Obsidian.",
+										label: "Aucune note publiée. Créez votre première note ou synchronisez depuis Obsidian.",
 									}
 								: {
 										type: "table",
@@ -1089,7 +1089,7 @@ export default definePlugin({
 								elements: notes
 									.map((n) => ({
 										type: "button",
-										text: `✏️ ${n.title}`,
+										label: `✏️ ${n.title}`,
 										action_id: "nav_edit",
 										value: JSON.stringify({ note_id: n.id, note_path: n.path }),
 									}))
@@ -1143,7 +1143,7 @@ export default definePlugin({
 							},
 							{
 								type: "actions",
-								elements: [{ type: "button", text: "← Retour", action_id: "nav_list" }],
+								elements: [{ type: "button", label: "← Retour", action_id: "nav_list" }],
 							},
 						],
 					};
@@ -1227,7 +1227,7 @@ export default definePlugin({
 							},
 							{
 								type: "actions",
-								elements: [{ type: "button", text: "← Retour à la liste", action_id: "nav_list" }],
+								elements: [{ type: "button", label: "← Retour à la liste", action_id: "nav_list" }],
 							},
 						],
 						toast: { message: "Note créée", type: "success" },
@@ -1313,13 +1313,13 @@ export default definePlugin({
 								elements: [
 									{
 										type: "button",
-										text: "🔀 Déplacer",
+										label: "🔀 Déplacer",
 										action_id: "nav_move",
 										value: JSON.stringify({ note_path: note.path }),
 									},
 									{
 										type: "button",
-										text: "🗑️ Supprimer",
+										label: "🗑️ Supprimer",
 										action_id: "do_delete",
 										style: "danger",
 										value: JSON.stringify({ note_path: note.path }),
@@ -1330,7 +1330,7 @@ export default definePlugin({
 											deny: "Annuler",
 										},
 									},
-									{ type: "button", text: "← Retour", action_id: "nav_list" },
+									{ type: "button", label: "← Retour", action_id: "nav_list" },
 								],
 							},
 						],
@@ -1408,7 +1408,7 @@ export default definePlugin({
 							},
 							{
 								type: "actions",
-								elements: [{ type: "button", text: "← Retour à la liste", action_id: "nav_list" }],
+								elements: [{ type: "button", label: "← Retour à la liste", action_id: "nav_list" }],
 							},
 						],
 						toast: { message: "Note sauvegardée", type: "success" },
@@ -1458,7 +1458,7 @@ export default definePlugin({
 							},
 							{
 								type: "actions",
-								elements: [{ type: "button", text: "← Annuler", action_id: "nav_list" }],
+								elements: [{ type: "button", label: "← Annuler", action_id: "nav_list" }],
 							},
 						],
 					};
@@ -1545,7 +1545,7 @@ export default definePlugin({
 							},
 							{
 								type: "actions",
-								elements: [{ type: "button", text: "← Retour à la liste", action_id: "nav_list" }],
+								elements: [{ type: "button", label: "← Retour à la liste", action_id: "nav_list" }],
 							},
 						],
 						toast: { message: "Note déplacée", type: "success" },
@@ -1599,7 +1599,7 @@ export default definePlugin({
 							},
 							{
 								type: "actions",
-								elements: [{ type: "button", text: "← Retour à la liste", action_id: "nav_list" }],
+								elements: [{ type: "button", label: "← Retour à la liste", action_id: "nav_list" }],
 							},
 						],
 						toast: { message: "Note supprimée", type: "success" },
@@ -1624,7 +1624,7 @@ export default definePlugin({
 										{
 											type: "actions",
 											elements: [
-												{ type: "button", text: "← Retour aux notes", action_id: "nav_list" },
+												{ type: "button", label: "← Retour aux notes", action_id: "nav_list" },
 											],
 										},
 									],
@@ -1633,7 +1633,7 @@ export default definePlugin({
 							{ type: "divider" },
 							{
 								type: "section",
-								text: `${attachments.length} fichier${attachments.length !== 1 ? "s" : ""} stocké${attachments.length !== 1 ? "s" : ""}. Uploadez des images et fichiers via le plugin Obsidian ou l'API \`POST /attachments/upload\`.`,
+								label: `${attachments.length} fichier${attachments.length !== 1 ? "s" : ""} stocké${attachments.length !== 1 ? "s" : ""}. Uploadez des images et fichiers via le plugin Obsidian ou l'API \`POST /attachments/upload\`.`,
 							},
 							attachments.length === 0
 								? {
@@ -1662,7 +1662,7 @@ export default definePlugin({
 											type: "actions",
 											elements: attachments.slice(0, 10).map((a) => ({
 												type: "button",
-												text: `🗑️ ${a.path.split("/").pop()}`,
+												label: `🗑️ ${a.path.split("/").pop()}`,
 												action_id: "do_delete_attachment",
 												style: "danger",
 												value: JSON.stringify({ attachment_path: a.path }),
@@ -1725,8 +1725,8 @@ export default definePlugin({
 							{
 								type: "actions",
 								elements: [
-									{ type: "button", text: "← Retour aux fichiers", action_id: "nav_attachments" },
-									{ type: "button", text: "📖 Notes", action_id: "nav_list" },
+									{ type: "button", label: "← Retour aux fichiers", action_id: "nav_attachments" },
+									{ type: "button", label: "📖 Notes", action_id: "nav_list" },
 								],
 							},
 						],
