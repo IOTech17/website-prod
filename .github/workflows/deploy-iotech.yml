@@ -1,0 +1,48 @@
+name: Deploy IØTech to Cloudflare Workers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "templates/theme-iotech-cloudflare-v3/**"
+      - "packages/core/**"
+      - "packages/admin/**"
+      - "packages/auth/**"
+      - "packages/auth-atproto/**"
+      - "packages/blocks/**"
+      - "packages/cloudflare/**"
+      - "packages/plugins/markdown-wiki/**"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4.2.2
+
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Build Cloudflare Workers theme
+        run: pnpm --filter @iotech/theme-iotech-cloudflare build
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@da0e0dfe58b7a431659754fecaaa8f92c4a65d03 # v3.14.1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: templates/theme-iotech-cloudflare-v3
