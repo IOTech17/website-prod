@@ -62,9 +62,9 @@ export function SecretInputElementComponent({
 		return (
 			<SensitiveInput
 				label={element.label}
-				value={"••••••••"}
-				readOnly
-				onFocus={handleFocus}
+				value={element.has_value ? "••••••••" : ""}
+				readOnly={isReadOnly}
+				onFocus={!isReadOnly ? handleFocus : undefined}
 				placeholder={element.placeholder}
 			/>
 		);

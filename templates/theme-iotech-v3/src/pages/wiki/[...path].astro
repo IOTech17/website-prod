@@ -17,7 +17,7 @@ const notePath = Array.isArray(pathParam) ? pathParam.join("/") : (pathParam || 
 // Astro already percent-decodes path params; re-decoding would throw on bare % chars.
 let decodedPath: string;
 try { decodedPath = decodeURIComponent(notePath); } catch { decodedPath = notePath; }
-if (!decodedPath || decodedPath.startsWith("/") || decodedPath.split("/").some(s => s === ".."))
+if (!decodedPath || decodedPath.startsWith("/") || decodedPath.split("/").some(s => s === ".." || s === "." || s === ""))
 	return Astro.redirect("/404");
 
 let allNotes: NoteEntry[] = [];
@@ -55,7 +55,7 @@ try {
 }
 
 const RE_MD_EXT     = /\.md$/;
-const RE_CODE_BLOCK = /```(\w*)\n([\s\S]*?)```/g;
+const RE_CODE_BLOCK = /```(\w*)\r?\n([\s\S]*?)```/g;
 const RE_XML_AMP    = /&/g;
 const RE_XML_LT     = /</g;
 const RE_XML_GT     = />/g;
@@ -69,7 +69,7 @@ const RE_H1_MD      = /^# (.+)$/gm;
 const RE_SLUG_WS    = /\s+/g;
 const RE_SLUG_CHARS = /[^a-z0-9-]/g;
 const RE_HR         = /^(-{3,}|\*{3,})$/gm;
-const RE_BLOCKQUOTE = /^> (.+)$/gm;
+const RE_BLOCKQUOTE = /^&gt; (.+)$/gm; // matches post-HTML-escape form
 const RE_TABLE      = /(\|.+\|\n\|[-| :]+\|\n(?:\|.+\|\n?)+)/g;
 const RE_UL         = /((?:^[ \t]*[-*+] .+\n?)+)/gm;
 const RE_UL_PREFIX  = /^[ \t]*[-*+] /;
@@ -80,17 +80,20 @@ const RE_BOLD       = /\*\*(.+?)\*\*/g;
 const RE_ITALIC     = /\*(.+?)\*/g;
 const RE_STRIKE     = /~~(.+?)~~/g;
 const RE_WIKI_EMBED = /!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+const RE_URL_SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
 const RE_IMAGE      = /!\[([^\]]*)\]\(([^)]+)\)/g;
 const RE_LINK       = /\[([^\]]+)\]\(([^)]+)\)/g;
 const IMAGE_EXTS    = /\.(png|jpe?g|gif|webp|svg|avif|bmp|tiff)$/i;
 const RE_PARAGRAPH  = /^(?!<[a-z]|%%)(.*\S.*)$/gm;
 const RE_XML_QUOT   = /"/g;
-const RE_SAFE_HREF  = /^(https?:|mailto:|\/|#|\.\/|\.\.\/)/i;
-const RE_SAFE_SRC   = /^(https?:|\/)/i;
+const RE_SAFE_HREF  = /^(https?:|mailto:|\/|#|\.\/)/i;
+const RE_SAFE_SRC   = /^(https?:|\/|\.\/)/i;
 const RE_ENT_AMP    = /&amp;/g;
 const RE_ENT_LT     = /&lt;/g;
 const RE_ENT_GT     = /&gt;/g;
 const RE_ENT_QUOT   = /&quot;/g;
+// Strips nonce placeholders (%%...%%) from heading text before slug generation
+const RE_PLACEHOLDER = /%%[^%]+%%/g;
 
 const esc = (s: string) =>
 	s.replace(RE_XML_AMP, "&amp;").replace(RE_XML_LT, "&lt;").replace(RE_XML_GT, "&gt;").replace(RE_XML_QUOT, "&quot;");
@@ -101,10 +104,11 @@ const breadcrumbs = pathParts.map((part, i) => ({
 	isLast: i === pathParts.length - 1,
 }));
 
-function fmtDate(iso: string) {
-	return new Date(iso).toLocaleDateString("fr-FR", {
-		day: "numeric", month: "long", year: "numeric",
-	});
+function fmtDate(iso: string | null | undefined): string {
+	if (!iso) return "—";
+	const d = new Date(iso);
+	if (isNaN(d.getTime())) return "—";
+	return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 }
 
 // Markdown → HTML (server-side, Web APIs only)
@@ -128,11 +132,13 @@ function mdToHtml(md: string): string {
 	// the generic image pass. Images render as <img>; other files as download links.
 	out = out.replace(RE_WIKI_EMBED, (_, target: string, alias?: string) => {
 		const t = target.trim();
+		// Normalize relative paths to ./ so RE_SAFE_SRC and RE_SAFE_HREF accept them
+		const href = (t.startsWith("/") || RE_URL_SCHEME.test(t)) ? t : `./${t}`;
 		const display = alias?.trim() || t.split("/").pop() || t;
 		if (IMAGE_EXTS.test(t)) {
-			return `![${display}](${t})`;
+			return `![${display}](${href})`;
 		}
-		return `[${display}](${t})`;
+		return `[${display}](${href})`;
 	});
 	// Extract images and links before HTML-escaping so we can escape their content
 	// individually while preserving the Markdown structure of the rest of the doc.
@@ -157,12 +163,12 @@ function mdToHtml(md: string): string {
 	out = out.replace(RE_H5, (_, t) => `<h5>${t}</h5>`);
 	out = out.replace(RE_H4, (_, t) => `<h4>${t}</h4>`);
 	out = out.replace(RE_H3, (_, t) => {
-		const raw = t.replace(RE_ENT_AMP, "&").replace(RE_ENT_LT, "<").replace(RE_ENT_GT, ">").replace(RE_ENT_QUOT, '"');
+		const raw = t.replace(RE_PLACEHOLDER, "").replace(RE_ENT_AMP, "&").replace(RE_ENT_LT, "<").replace(RE_ENT_GT, ">").replace(RE_ENT_QUOT, '"').trim();
 		const id = raw.toLowerCase().replace(RE_SLUG_WS, "-").replace(RE_SLUG_CHARS, "");
 		return `<h3 id="${id}">${t}</h3>`;
 	});
 	out = out.replace(RE_H2, (_, t) => {
-		const raw = t.replace(RE_ENT_AMP, "&").replace(RE_ENT_LT, "<").replace(RE_ENT_GT, ">").replace(RE_ENT_QUOT, '"');
+		const raw = t.replace(RE_PLACEHOLDER, "").replace(RE_ENT_AMP, "&").replace(RE_ENT_LT, "<").replace(RE_ENT_GT, ">").replace(RE_ENT_QUOT, '"').trim();
 		const id = raw.toLowerCase().replace(RE_SLUG_WS, "-").replace(RE_SLUG_CHARS, "");
 		return `<h2 id="${id}">${t}</h2>`;
 	});
@@ -171,42 +177,49 @@ function mdToHtml(md: string): string {
 	out = out.replace(RE_BLOCKQUOTE, (_, t) => `<blockquote>${t}</blockquote>`);
 	out = out.replace(RE_TABLE, table => {
 		const rows = table.trim().split("\n");
-		const ths = rows[0].split("|").filter(c => c.trim());
+		// Slice off the leading and trailing empty strings from splitting "| a | b |"
+		const ths = rows[0].split("|").slice(1, -1);
 		const trs = rows.slice(2).map(r =>
-			"<tr>" + r.split("|").filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join("") + "</tr>"
+			"<tr>" + r.split("|").slice(1, -1).map(c => `<td>${c.trim()}</td>`).join("") + "</tr>"
 		).join("");
 		return `<table><thead><tr>${ths.map(h => `<th>${h.trim()}</th>`).join("")}</tr></thead><tbody>${trs}</tbody></table>`;
 	});
 	out = out.replace(RE_UL, list => {
-		const items = list.trim().split("\n").map(l => `<li>${l.replace(RE_UL_PREFIX, "")}</li>`).join("");
+		// Join with \n so bold/italic regexes (which don't cross newlines) can't span items
+		const items = list.trim().split("\n").map(l => `<li>${l.replace(RE_UL_PREFIX, "")}</li>`).join("\n");
 		return `<ul>${items}</ul>`;
 	});
 	out = out.replace(RE_OL, list => {
-		const items = list.trim().split("\n").map(l => `<li>${l.replace(RE_OL_PREFIX, "")}</li>`).join("");
+		const items = list.trim().split("\n").map(l => `<li>${l.replace(RE_OL_PREFIX, "")}</li>`).join("\n");
 		return `<ol>${items}</ol>`;
 	});
+	// Paragraph pass runs before inline formatting so lines starting with
+	// <strong>/<em>/<del> (produced by bold/italic/strike) get a <p> wrapper.
+	out = out.replace(RE_PARAGRAPH, "<p>$1</p>");
 	out = out.replace(RE_BOLD_ITALIC, "<strong><em>$1</em></strong>");
 	out = out.replace(RE_BOLD, "<strong>$1</strong>");
 	out = out.replace(RE_ITALIC, "<em>$1</em>");
 	out = out.replace(RE_STRIKE, "<del>$1</del>");
-	out = out.replace(RE_PARAGRAPH, "<p>$1</p>");
-	codeBlocks.forEach((b, i) => { out = out.replace(`%%CODE_${N}_${i}%%`, b); });
-	inlines.forEach((b, i) => { out = out.replace(`%%INLINE_${N}_${i}%%`, b); });
-	links.forEach((b, i) => { out = out.replace(`%%LINK_${N}_${i}%%`, b); });
-	images.forEach((b, i) => { out = out.replace(`%%IMG_${N}_${i}%%`, b); });
+	// Use function replacements to avoid $& / $` / $' / $$ interpolation in replacement strings
+	codeBlocks.forEach((b, i) => { out = out.replace(`%%CODE_${N}_${i}%%`, () => b); });
+	inlines.forEach((b, i) => { out = out.replace(`%%INLINE_${N}_${i}%%`, () => b); });
+	links.forEach((b, i) => { out = out.replace(`%%LINK_${N}_${i}%%`, () => b); });
+	images.forEach((b, i) => { out = out.replace(`%%IMG_${N}_${i}%%`, () => b); });
 	return out;
 }
 
 const html = mdToHtml(note?.content || "");
 
 const tocItems: Array<{ level: number; text: string; id: string }> = [];
-const contentForToc = (note?.content || "").replace(/```[\s\S]*?```/g, "");
+const contentForToc = (note?.content || "").replace(/```(\w*)\r?\n[\s\S]*?```/g, "");
 const hRe = /^#{2,3} (.+)$/gm;
 let m;
 while ((m = hRe.exec(contentForToc)) !== null) {
 	const level = m[0].startsWith("###") ? 3 : 2;
-	const text = m[1];
-	const id = text.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+	const text = m[1]!;
+	// Strip inline code, images, and links to match the id produced by mdToHtml.
+	const cleanText = text.replace(/`[^`]*`/g, "").replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").trim();
+	const id = cleanText.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
 	tocItems.push({ level, text, id });
 }
 ---
@@ -325,6 +338,14 @@ while ((m = hRe.exec(contentForToc)) !== null) {
 	</div>
 
 	{isAdmin && (
+		<div id="wiki-init-data"
+			data-content={note?.content ?? ""}
+			data-visibility={note?.visibility ?? "public"}
+			hidden
+		/>
+	)}
+
+	{isAdmin && (
 		<dialog id="wiki-move-dialog" class="wiki-dialog">
 			<div class="wiki-dialog-header">
 				<span class="wiki-dialog-title">🔀 Déplacer la note</span>
@@ -363,8 +384,30 @@ while ((m = hRe.exec(contentForToc)) !== null) {
 	)}
 </WikiLayout>
 
-<script define:vars={{ isAdmin, notePath: decodedPath, initContent: note?.content ?? "", initVisibility: note?.visibility ?? "public", wikiSlug: WIKI_SLUG, wikiApiKey: isAdmin ? wikiApiKey : "" }}>
+<script define:vars={{ isAdmin, notePath: decodedPath, wikiSlug: WIKI_SLUG, wikiApiKey: isAdmin ? wikiApiKey : "" }}>
+async function doDelete() {
+	if (!confirm(`Supprimer définitivement "${notePath}" ?`)) return;
+	try {
+		const res = await fetch("/_emdash/api/plugins/markdown-wiki/notes/delete", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", "X-EmDash-Request": "1", ...(wikiApiKey ? { "X-Wiki-Key": wikiApiKey } : {}) },
+			body: JSON.stringify({ path: notePath }),
+		});
+		if (!res.ok) {
+			const err = await res.json().catch(() => ({}));
+			throw new Error(err?.error?.message || `Erreur ${res.status}`);
+		}
+		window.location.href = `/${wikiSlug}`;
+	} catch (e) { alert("Erreur lors de la suppression : " + e.message); }
+}
+
 if (isAdmin) {
+	// Read note content and visibility from a hidden data element instead of
+	// define:vars — JSON.stringify does not escape script-closing sequences.
+	const initDataEl   = document.getElementById("wiki-init-data");
+	const initContent  = initDataEl?.dataset.content  ?? "";
+	const initVisibility = initDataEl?.dataset.visibility ?? "public";
+
 	const editBtn    = document.getElementById("wiki-edit-btn");
 	const saveBar    = document.getElementById("wiki-save-bar");
 	const saveBtns   = document.querySelectorAll(".wiki-save-btn");
@@ -406,8 +449,8 @@ if (isAdmin) {
 	const authH = wikiApiKey ? { "X-Wiki-Key": wikiApiKey } : {};
 
 	async function save() {
-		const content = ta.value.trim();
-		if (!content) { setStatus("Le contenu ne peut pas être vide.", true); return; }
+		if (!ta.value.trim()) { setStatus("Le contenu ne peut pas être vide.", true); return; }
+		const content = ta.value;
 		saveBtns.forEach(b => { b.disabled = true; b.textContent = "Sauvegarde…"; });
 		setStatus("", false);
 		try {
@@ -487,9 +530,24 @@ if (isAdmin) {
 
 	async function confirmMove() {
 		const newPath = moveInput.value.trim();
-		if (!newPath || newPath === notePath) { moveDialog.close(); return; }
+		if (!newPath) { moveDialog.close(); return; }
+		if (newPath === notePath) {
+			moveError.textContent = "Le chemin est identique au chemin actuel.";
+			moveError.hidden = false;
+			return;
+		}
 		if (!newPath.endsWith(".md")) {
 			moveError.textContent = 'Le chemin doit se terminer par ".md".';
+			moveError.hidden = false;
+			return;
+		}
+		if (newPath.split("/").some(s => s === ".." || s === "." || s === "")) {
+			moveError.textContent = 'Le chemin ne peut pas contenir ".", ".." ou des segments vides.';
+			moveError.hidden = false;
+			return;
+		}
+		if (newPath.startsWith("/")) {
+			moveError.textContent = 'Le chemin ne peut pas commencer par "/".';
 			moveError.hidden = false;
 			return;
 		}
@@ -576,23 +634,6 @@ if (isAdmin) {
 	saveBtns.forEach(b => b.addEventListener("click", save));
 	cancelBtns.forEach(b => b.addEventListener("click", exitEdit));
 	moveBtn?.addEventListener("click", doMove);
-
-	async function doDelete() {
-		if (!confirm(`Supprimer définitivement "${notePath}" ?`)) return;
-		try {
-			const res = await fetch("/_emdash/api/plugins/markdown-wiki/notes/delete", {
-				method: "POST",
-				headers: { "Content-Type": "application/json", "X-EmDash-Request": "1", ...(wikiApiKey ? { "X-Wiki-Key": wikiApiKey } : {}) },
-				body: JSON.stringify({ path: notePath }),
-			});
-			if (!res.ok) {
-				const err = await res.json().catch(() => ({}));
-				throw new Error(err?.error?.message || `Erreur ${res.status}`);
-			}
-			window.location.href = `/${wikiSlug}`;
-		} catch (e) { alert("Erreur lors de la suppression : " + e.message); }
-	}
-
 	deleteBtn?.addEventListener("click", doDelete);
 
 	// Auto-edit si ?edit=1 dans l'URL (après création d'une note)

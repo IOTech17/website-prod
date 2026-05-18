@@ -107,12 +107,12 @@ const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024; // 20 MB
 
 // Allowed MIME types for attachment uploads
 const ALLOWED_MIME_TYPES = new Set([
-	// Images
+	// Images — SVG excluded: browsers execute SVG as HTML/JS if served without
+	// Content-Disposition: attachment, making it a stored XSS vector.
 	"image/png",
 	"image/jpeg",
 	"image/gif",
 	"image/webp",
-	"image/svg+xml",
 	"image/avif",
 	"image/bmp",
 	"image/tiff",
@@ -134,7 +134,6 @@ const IMAGE_EXTENSIONS = new Set([
 	"jpeg",
 	"gif",
 	"webp",
-	"svg",
 	"avif",
 	"bmp",
 	"tiff",
@@ -146,11 +145,29 @@ function formatBytes(bytes: number): string {
 	return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
+// ── Path validation ────────────────────────────────────────────────────────
+
+// Validates a wiki note path. Returns a human-readable error string on failure,
+// or null when the path is acceptable.
+function validateNotePath(path: string): string | null {
+	if (!path) return "path is required";
+	if (!path.endsWith(".md")) return "path must end with .md";
+	if (path.length > 512) return "path must be at most 512 characters";
+	if (RE_INVALID_PATH_CHARS.test(path))
+		return "path must not contain control characters";
+	if (path.split("/").some((s) => s === ".."))
+		return "path must not contain .. segments";
+	return null;
+}
+
 // Module-scope regex constants to avoid re-compilation on every call
 const RE_H1 = /^#\s+(.+)$/m;
 const RE_MD_EXT = /\.md$/i;
 const RE_SLUG_SEPS = /[-_]/g;
-const RE_FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---/; // \r?\n handles Windows CRLF
+// Limit frontmatter to 4 KB to prevent catastrophic backtracking on notes that
+// start with --- but lack a closing --- delimiter. Require EOL after closing ---
+// to avoid matching horizontal rules (--- followed by text).
+const RE_FRONTMATTER = /^---\r?\n([\s\S]{0,4096}?)\r?\n---(?:\r?\n|$)/; // \r?\n handles Windows CRLF
 const RE_TAGS_LINE = /^tags:\s*\[(.+)\]/m; // inline: tags: [a, b]
 const RE_TAGS_BLOCK = /^tags:\s*\r?\n((?:[ \t]*-[ \t]+.+\r?\n?)+)/m; // block: tags:\n  - a
 const RE_TAGS_BLOCK_ITEM = /^[ \t]*-[ \t]+(.+)$/gm;
@@ -158,7 +175,10 @@ const RE_QUOTES = /['"]/g;
 const RE_HASHTAGS = /#([a-zA-Z0-9_-]+)/g;
 const RE_NON_ALNUM = /[^a-z0-9\s]/g;
 const RE_WHITESPACE = /\s+/;
-const RE_INVALID_PATH_CHARS = /[\r\n]/;
+// eslint-disable-next-line no-control-regex
+const RE_INVALID_PATH_CHARS = /[\x00-\x1f\x7f]/; // full C0 + DEL range
+const RE_UUID = /^[0-9a-f-]{36}$/i;
+const RE_ANY_WHITESPACE = /\s/g;
 // Obsidian wiki embed: ![[filename]] or ![[filename|alias]]
 const RE_WIKI_EMBED = /!\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
 // Standard Markdown image with relative (non-http) path
@@ -357,18 +377,21 @@ export default definePlugin({
 			handler: async (routeCtx: { request: Request }, ctx: PluginContext) => {
 				const url = new URL(routeCtx.request.url);
 				const tag = url.searchParams.get("tag");
-				const limit = Math.min(Number(url.searchParams.get("limit") || 100), 500);
+				const limit = Math.min(Math.max(1, Number(url.searchParams.get("limit")) || 100), 500);
 
 				const storage = ctx.storage as unknown as Storage;
 				const authenticated = await checkApiKey(routeCtx.request, storage);
 
 				const result = await storage.notes.query({ limit: 5000 });
+				const pool_overflow = result.hasMore === true;
 				let notes = result.items.map((i) => ({ id: i.id, ...i.data }));
 
 				if (!authenticated) notes = notes.filter((n) => n.visibility === "public");
 				if (tag) notes = notes.filter((n) => n.tags.includes(tag));
 				const total = notes.length;
-				return { notes: notes.slice(0, limit), total, truncated: result.items.length >= 5000 };
+				// truncated: caller's view is capped by limit. pool_overflow: underlying pool
+				// hit 5000 — authenticated clients should use notes/since for full sync.
+				return { notes: notes.slice(0, limit), total, truncated: notes.length > limit, pool_overflow };
 			},
 		},
 
@@ -381,6 +404,8 @@ export default definePlugin({
 			) => {
 				const { path } = routeCtx.input || {};
 				if (!path) throw PluginRouteError.badRequest("path is required");
+				const getPathErr = validateNotePath(path);
+				if (getPathErr) throw PluginRouteError.badRequest(getPathErr);
 				const storage = ctx.storage as unknown as Storage;
 				const result = await storage.notes.query({ where: { path } });
 				if (!result.items[0]) throw PluginRouteError.notFound("Note not found");
@@ -403,7 +428,7 @@ export default definePlugin({
 			handler: async (routeCtx: { request: Request }, ctx: PluginContext) => {
 				const url = new URL(routeCtx.request.url);
 				const q = url.searchParams.get("q")?.toLowerCase().trim();
-				const limit = Math.min(Number(url.searchParams.get("limit") || 10), 50);
+				const limit = Math.min(Math.max(1, Number(url.searchParams.get("limit")) || 10), 50);
 
 				if (!q || q.length < 2) return { results: [] };
 
@@ -416,7 +441,6 @@ export default definePlugin({
 						pathScores.set(m.data.notePath, (pathScores.get(m.data.notePath) || 0) + 1);
 					}
 				}
-
 				const results = [];
 				for (const [notePath] of [...pathScores.entries()]
 					.toSorted((a, b) => b[1] - a[1])
@@ -440,6 +464,8 @@ export default definePlugin({
 				const url = new URL(routeCtx.request.url);
 				const path = url.searchParams.get("path");
 				if (!path) throw PluginRouteError.badRequest("path is required");
+				const histPathErr = validateNotePath(path);
+				if (histPathErr) throw PluginRouteError.badRequest(histPathErr);
 
 				const noteResult = await storage.notes.query({ where: { path } });
 				if (!noteResult.items[0]) throw PluginRouteError.notFound("Note not found");
@@ -447,6 +473,7 @@ export default definePlugin({
 				const result = await storage.history.query({
 					where: { notePath: path },
 					orderBy: { createdAt: "desc" },
+					limit: MAX_HISTORY + 5,
 				});
 				return { history: result.items.map((i) => i.data), path };
 			},
@@ -464,7 +491,7 @@ export default definePlugin({
 
 				const url = new URL(routeCtx.request.url);
 				const since = url.searchParams.get("since") || url.searchParams.get("timestamp") || null;
-				const limit = Math.min(Number(url.searchParams.get("limit") || 200), 500);
+				const limit = Math.min(Math.max(1, Number(url.searchParams.get("limit")) || 200), 500);
 
 				const result = await storage.notes.query({ orderBy: { updatedAt: "desc" }, limit: 5000 });
 				const poolTruncated = result.hasMore === true;
@@ -472,8 +499,9 @@ export default definePlugin({
 
 				if (since) {
 					const sinceMs = new Date(since).getTime();
-					if (!isNaN(sinceMs))
-						notes = notes.filter((n) => new Date(n.updatedAt).getTime() > sinceMs);
+					if (isNaN(sinceMs))
+						throw PluginRouteError.badRequest("invalid since timestamp — use ISO 8601 format");
+					notes = notes.filter((n) => new Date(n.updatedAt).getTime() > sinceMs);
 				}
 
 				const page = notes.slice(0, limit);
@@ -481,7 +509,8 @@ export default definePlugin({
 					notes: page,
 					total: notes.length,
 					since,
-					truncated: poolTruncated || notes.length > limit,
+					truncated: notes.length > limit,
+					pool_overflow: poolTruncated,
 				};
 			},
 		},
@@ -500,15 +529,8 @@ export default definePlugin({
 				const b = routeCtx.input;
 				if (!b?.path || !b?.content)
 					throw PluginRouteError.badRequest("path and content are required");
-				if (
-					!b.path.endsWith(".md") ||
-					b.path.length > 512 ||
-					b.path.includes("\0") ||
-					RE_INVALID_PATH_CHARS.test(b.path)
-				)
-					throw PluginRouteError.badRequest(
-						"path must be a .md filename, max 512 chars, no control characters",
-					);
+				const pathErr = validateNotePath(b.path);
+				if (pathErr) throw PluginRouteError.badRequest(pathErr);
 				if (b.visibility && !["public", "private", "clients"].includes(b.visibility)) {
 					throw PluginRouteError.badRequest("Invalid visibility value");
 				}
@@ -544,10 +566,15 @@ export default definePlugin({
 			) => {
 				const storage = ctx.storage as unknown as Storage;
 				await authenticateWrite(routeCtx.request, storage);
-				// Strip createdAt from fields — callers must not overwrite the original creation timestamp
-				const { path, createdAt: _createdAt, ...fields } = routeCtx.input || {};
+				// Allowlist fields — never spread raw caller input onto stored records
+				const { path } = routeCtx.input || {};
+				const input = routeCtx.input || {};
 				if (!path) throw PluginRouteError.badRequest("path is required");
-				if (fields.visibility && !["public", "private", "clients"].includes(fields.visibility)) {
+				const updatePathErr = validateNotePath(path);
+				if (updatePathErr) throw PluginRouteError.badRequest(updatePathErr);
+				if (input.content !== undefined && !input.content.trim())
+					throw PluginRouteError.badRequest("content cannot be empty");
+				if (input.visibility && !["public", "private", "clients"].includes(input.visibility)) {
 					throw PluginRouteError.badRequest("Invalid visibility value");
 				}
 				const result = await storage.notes.query({ where: { path } });
@@ -558,11 +585,11 @@ export default definePlugin({
 
 				const updated: WikiNote = {
 					...existing,
-					...fields,
 					path: existing.path,
-					title:
-						fields.title || (fields.content ? extractTitle(fields.content, path) : existing.title),
-					tags: fields.tags || (fields.content ? extractTags(fields.content) : existing.tags),
+					content: input.content !== undefined ? input.content : existing.content,
+					visibility: input.visibility ?? existing.visibility,
+					title: input.title || (input.content ? extractTitle(input.content, path) : existing.title),
+					tags: input.tags || (input.content ? extractTags(input.content) : existing.tags),
 					updatedAt: new Date().toISOString(),
 				};
 				await storage.notes.put(id, updated);
@@ -582,15 +609,19 @@ export default definePlugin({
 				await authenticateWrite(routeCtx.request, storage);
 				const { path } = routeCtx.input || {};
 				if (!path) throw PluginRouteError.badRequest("path is required");
+				const deletePathErr = validateNotePath(path);
+				if (deletePathErr) throw PluginRouteError.badRequest(deletePathErr);
 				const result = await storage.notes.query({ where: { path } });
 				if (!result.items[0]) throw PluginRouteError.notFound("Note not found");
 
-				// Delete index and history first — if the note delete fails, content is still accessible
+				// Delete the note record first — if it succeeds, token/history cleanup
+				// is best-effort. Inverting this order would leave the note accessible
+				// but with no history if the note delete fails.
+				await storage.notes.delete(result.items[0].id);
 				const tokens = await storage.search_index.query({ where: { notePath: path } });
 				for (const t of tokens.items) await storage.search_index.delete(t.id);
 				const hist = await storage.history.query({ where: { notePath: path } });
 				for (const h of hist.items) await storage.history.delete(h.id);
-				await storage.notes.delete(result.items[0].id);
 
 				return { deleted: true, path };
 			},
@@ -607,15 +638,10 @@ export default definePlugin({
 				await authenticateWrite(routeCtx.request, storage);
 				const { path, newPath } = routeCtx.input || {};
 				if (!path || !newPath) throw PluginRouteError.badRequest("path and newPath are required");
-				if (
-					!newPath.endsWith(".md") ||
-					newPath.length > 512 ||
-					newPath.includes("\0") ||
-					RE_INVALID_PATH_CHARS.test(newPath)
-				)
-					throw PluginRouteError.badRequest(
-						"newPath must be a .md filename, max 512 chars, no control characters",
-					);
+				const moveSourceErr = validateNotePath(path);
+				if (moveSourceErr) throw PluginRouteError.badRequest(`path: ${moveSourceErr}`);
+				const moveDestErr = validateNotePath(newPath);
+				if (moveDestErr) throw PluginRouteError.badRequest(`newPath: ${moveDestErr}`);
 				const result = await storage.notes.query({ where: { path } });
 				if (!result.items[0]) throw PluginRouteError.notFound("Note not found");
 
@@ -665,6 +691,8 @@ export default definePlugin({
 				if (!Array.isArray(notes)) throw PluginRouteError.badRequest("notes array required");
 				if (notes.length > 200)
 					throw PluginRouteError.badRequest("Sync payload too large — max 200 notes per request");
+				if (Array.isArray(delete_paths) && delete_paths.length > 200)
+					throw PluginRouteError.badRequest("delete_paths too large — max 200 per request");
 				let created = 0,
 					updated = 0,
 					deleted = 0;
@@ -683,13 +711,7 @@ export default definePlugin({
 
 				for (const n of notes) {
 					if (!n.path || !n.content) continue;
-					if (
-						!n.path.endsWith(".md") ||
-						n.path.length > 512 ||
-						n.path.includes("\0") ||
-						RE_INVALID_PATH_CHARS.test(n.path)
-					)
-						continue;
+					if (validateNotePath(n.path) !== null) continue;
 					const resolvedVisibility =
 						n.visibility && ["public", "private", "clients"].includes(n.visibility)
 							? n.visibility
@@ -733,20 +755,18 @@ export default definePlugin({
 
 				// Handle deletions pushed from Obsidian
 				if (Array.isArray(delete_paths)) {
-					if (delete_paths.length > 200)
-						throw PluginRouteError.badRequest("delete_paths too large — max 200 per request");
 					for (const path of delete_paths) {
-						if (!path) continue;
+						if (!path || validateNotePath(path) !== null) continue;
 						try {
 							const toDelete = (await storage.notes.query({ where: { path } })).items[0];
 							if (toDelete) {
-								// Delete index and history first — mirrors notes/delete ordering
+								// Delete note record first; cleanup is best-effort after
+								await storage.notes.delete(toDelete.id);
+								deleted++;
 								const tokens = await storage.search_index.query({ where: { notePath: path } });
 								for (const t of tokens.items) await storage.search_index.delete(t.id);
 								const hist = await storage.history.query({ where: { notePath: path } });
 								for (const h of hist.items) await storage.history.delete(h.id);
-								await storage.notes.delete(toDelete.id);
-								deleted++;
 							}
 						} catch (err) {
 							ctx.log.error(`[markdown-wiki] Sync delete failed for ${path}: ${err}`);
@@ -793,11 +813,7 @@ export default definePlugin({
 				if (!data) throw PluginRouteError.badRequest("data field required (base64-encoded bytes)");
 
 				const trimmedPath = path.trim();
-				if (
-					trimmedPath.length > 512 ||
-					trimmedPath.includes("\0") ||
-					RE_INVALID_PATH_CHARS.test(trimmedPath)
-				)
+				if (trimmedPath.length > 512 || RE_INVALID_PATH_CHARS.test(trimmedPath))
 					throw PluginRouteError.badRequest("invalid path — max 512 chars, no control characters");
 
 				const trimmedFilename = filename.trim();
@@ -813,15 +829,17 @@ export default definePlugin({
 				if (!ALLOWED_MIME_TYPES.has(mimeType))
 					throw PluginRouteError.badRequest(`unsupported file type: ${mimeType}`);
 
-				// Reject oversized base64 before decoding to avoid allocating the full buffer
-				// then throwing — 4/3 ratio + 4 bytes for padding
-				if (data.length > Math.ceil(MAX_ATTACHMENT_SIZE * (4 / 3)) + 4)
+				// Strip MIME base64 whitespace (newlines every 76 chars) before size check;
+				// atob() accepts whitespace per WHATWG spec but the length check must use
+				// the stripped form to avoid false-positives on valid ~20 MB files.
+				const dataStripped = data.replace(RE_ANY_WHITESPACE, "");
+				if (dataStripped.length > Math.ceil(MAX_ATTACHMENT_SIZE * (4 / 3)) + 4)
 					throw PluginRouteError.badRequest("file too large — max 20 MB");
 
 				// Decode base64 → ArrayBuffer
 				let bytes: ArrayBuffer;
 				try {
-					const binary = atob(data);
+					const binary = atob(dataStripped);
 					const arr = new Uint8Array(binary.length);
 					for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
 					bytes = arr.buffer;
@@ -869,7 +887,7 @@ export default definePlugin({
 				await authenticateWrite(routeCtx.request, storage);
 
 				const url = new URL(routeCtx.request.url);
-				const limit = Math.min(Number(url.searchParams.get("limit") || 100), 500);
+				const limit = Math.min(Math.max(1, Number(url.searchParams.get("limit")) || 100), 500);
 
 				const result = await storage.attachments.query({
 					orderBy: { uploadedAt: "desc" },
@@ -898,7 +916,16 @@ export default definePlugin({
 				const result = (await storage.attachments.query({ where: { path } })).items[0];
 				if (!result) throw PluginRouteError.notFound("Attachment not found");
 
+				// Delete metadata record first; R2 cleanup is best-effort.
+				// Avoids a zombie metadata entry if the R2 delete throws.
 				await storage.attachments.delete(result.id);
+				if (ctx.media?.delete) {
+					try {
+						await ctx.media.delete(result.data.storageKey);
+					} catch (err) {
+						ctx.log.warn(`[markdown-wiki] Could not delete R2 object for ${path}: ${err}`);
+					}
+				}
 				ctx.log.info(`[markdown-wiki] Attachment deleted: ${path}`);
 				return { deleted: true, path };
 			},
@@ -1243,18 +1270,14 @@ export default definePlugin({
 							toast: { message: "Champs manquants", type: "error" },
 						};
 					}
-					if (
-						!v.path.endsWith(".md") ||
-						v.path.length > 512 ||
-						v.path.includes("\0") ||
-						RE_INVALID_PATH_CHARS.test(v.path)
-					) {
+					const createPathErr = validateNotePath(v.path);
+					if (createPathErr) {
 						return {
 							blocks: [
 								{
 									type: "banner",
 									title: "Erreur",
-									description: "Chemin invalide (doit se terminer par .md, max 512 caractères).",
+									description: `Chemin invalide : ${createPathErr}.`,
 									variant: "error",
 								},
 							],
@@ -1329,6 +1352,18 @@ export default definePlugin({
 							],
 						};
 					}
+					const navEditPathErr = validateNotePath(note_path);
+					if (navEditPathErr)
+						return {
+							blocks: [
+								{
+									type: "banner",
+									title: "Erreur",
+									description: "Chemin invalide.",
+									variant: "error",
+								},
+							],
+						};
 					const result = await storage.notes.query({ where: { path: note_path } });
 					if (!result.items[0]) {
 						return {
@@ -1379,9 +1414,9 @@ export default definePlugin({
 									},
 									{
 										type: "text_input",
-										action_id: "_path",
-										label: "_path",
-										initial_value: note.path,
+										action_id: "_note_id",
+										label: "_note_id",
+										initial_value: note.id,
 									},
 								],
 								submit: { label: "Enregistrer", action_id: "do_edit" },
@@ -1393,7 +1428,7 @@ export default definePlugin({
 										type: "button",
 										label: "🔀 Déplacer",
 										action_id: "nav_move",
-										value: JSON.stringify({ note_path: note.path }),
+										value: JSON.stringify({ note_path: note.path, note_id: note.id }),
 									},
 									{
 										type: "button",
@@ -1418,21 +1453,23 @@ export default definePlugin({
 				// ── Action: sauvegarder l'édition ─────────────────────────
 				if (interaction.action_id === "do_edit" && interaction.values) {
 					const v = interaction.values as Record<string, string>;
-					const path = v._path;
-					if (!path)
+					// Use the note UUID (not a user-supplied path) to prevent accidental
+					// overwrite of a different note if _note_id were modified.
+					const noteId = v._note_id;
+					if (!noteId || !RE_UUID.test(noteId))
 						return {
 							blocks: [
 								{
 									type: "banner",
 									title: "Erreur",
-									description: "Chemin manquant.",
+									description: "ID de note manquant.",
 									variant: "error",
 								},
 							],
 						};
 
-					const result = await storage.notes.query({ where: { path } });
-					if (!result.items[0])
+					const existing = (await storage.notes.get(noteId)) as WikiNote | null;
+					if (!existing)
 						return {
 							blocks: [
 								{
@@ -1444,7 +1481,8 @@ export default definePlugin({
 							],
 						};
 
-					const { id, data: existing } = result.items[0];
+					const id = noteId;
+					const path = existing.path;
 
 					if (v.content !== undefined && !v.content.trim()) {
 						return {
@@ -1463,6 +1501,7 @@ export default definePlugin({
 					await saveHistory(storage, existing, path);
 					const updated: WikiNote = {
 						...existing,
+						path,
 						title: v.title || existing.title,
 						content: v.content !== undefined ? v.content : existing.content,
 						visibility: (["public", "private", "clients"] as const).includes(
@@ -1496,8 +1535,9 @@ export default definePlugin({
 				// ── Page: déplacer une note ────────────────────────────────
 				if (interaction.action_id === "nav_move" && interaction.value) {
 					let note_path: string;
+					let note_id: string;
 					try {
-						({ note_path } = JSON.parse(interaction.value));
+						({ note_path, note_id } = JSON.parse(interaction.value));
 					} catch {
 						return {
 							blocks: [
@@ -1510,6 +1550,18 @@ export default definePlugin({
 							],
 						};
 					}
+					const navMovePathErr = validateNotePath(note_path);
+					if (navMovePathErr || !note_id || !RE_UUID.test(note_id))
+						return {
+							blocks: [
+								{
+									type: "banner",
+									title: "Erreur",
+									description: "Chemin ou identifiant invalide.",
+									variant: "error",
+								},
+							],
+						};
 					return {
 						blocks: [
 							{ type: "header", text: "🔀 Déplacer la note" },
@@ -1521,9 +1573,9 @@ export default definePlugin({
 								fields: [
 									{
 										type: "text_input",
-										action_id: "_old_path",
-										label: "_old_path",
-										initial_value: note_path,
+										action_id: "_note_id",
+										label: "_note_id",
+										initial_value: note_id,
 									},
 									{
 										type: "text_input",
@@ -1545,39 +1597,35 @@ export default definePlugin({
 				// ── Action: déplacer ───────────────────────────────────────
 				if (interaction.action_id === "do_move" && interaction.values) {
 					const v = interaction.values as Record<string, string>;
-					const oldPath = v._old_path;
+					const noteId = v._note_id;
 					const newPath = v.new_path;
-					if (!oldPath || !newPath)
+					if (!noteId || !RE_UUID.test(noteId) || !newPath)
 						return {
 							blocks: [
 								{
 									type: "banner",
 									title: "Erreur",
-									description: "Chemins manquants.",
+									description: "Données manquantes.",
 									variant: "error",
 								},
 							],
 						};
-					if (
-						!newPath.endsWith(".md") ||
-						newPath.length > 512 ||
-						newPath.includes("\0") ||
-						RE_INVALID_PATH_CHARS.test(newPath)
-					)
+					const moveNewPathErr = validateNotePath(newPath);
+					if (moveNewPathErr)
 						return {
 							blocks: [
 								{
 									type: "banner",
 									title: "Erreur",
-									description:
-										"Nouveau chemin invalide (doit se terminer par .md, max 512 caractères).",
+									description: `Nouveau chemin invalide : ${moveNewPathErr}.`,
 									variant: "error",
 								},
 							],
 						};
 
-					const result = await storage.notes.query({ where: { path: oldPath } });
-					if (!result.items[0])
+					// Look up by UUID — prevents accidental move of a different note
+					const existingData = (await storage.notes.get(noteId)) as WikiNote | null;
+					if (!existingData)
 						return {
 							blocks: [
 								{
@@ -1588,6 +1636,8 @@ export default definePlugin({
 								},
 							],
 						};
+					const oldPath = existingData.path;
+					const id = noteId;
 
 					const existingDest = await storage.notes.query({ where: { path: newPath } });
 					if (existingDest.items[0])
@@ -1602,8 +1652,7 @@ export default definePlugin({
 							],
 						};
 
-					const { id, data } = result.items[0];
-					const moved: WikiNote = { ...data, path: newPath, updatedAt: new Date().toISOString() };
+					const moved: WikiNote = { ...existingData, path: newPath, updatedAt: new Date().toISOString() };
 					await storage.notes.put(id, moved);
 
 					const tokens = await storage.search_index.query({ where: { notePath: oldPath } });
@@ -1647,6 +1696,18 @@ export default definePlugin({
 							],
 						};
 					}
+					const deletePathErr = validateNotePath(note_path);
+					if (deletePathErr)
+						return {
+							blocks: [
+								{
+									type: "banner",
+									title: "Erreur",
+									description: "Chemin invalide.",
+									variant: "error",
+								},
+							],
+						};
 					const result = await storage.notes.query({ where: { path: note_path } });
 					if (!result.items[0])
 						return {
@@ -1660,11 +1721,12 @@ export default definePlugin({
 							],
 						};
 
+					// Delete note record first; cleanup is best-effort
+					await storage.notes.delete(result.items[0].id);
 					const tokens = await storage.search_index.query({ where: { notePath: note_path } });
 					for (const t of tokens.items) await storage.search_index.delete(t.id);
 					const hist = await storage.history.query({ where: { notePath: note_path } });
 					for (const h of hist.items) await storage.history.delete(h.id);
-					await storage.notes.delete(result.items[0].id);
 
 					ctx.log.info(`[markdown-wiki] Admin deleted: ${note_path}`);
 					return {
@@ -1789,7 +1851,15 @@ export default definePlugin({
 							],
 						};
 					}
+					// Delete metadata record first; R2 cleanup is best-effort
 					await storage.attachments.delete(result.id);
+					if (ctx.media?.delete) {
+						try {
+							await ctx.media.delete(result.data.storageKey);
+						} catch (err) {
+							ctx.log.warn(`[markdown-wiki] Could not delete R2 object for ${attachment_path}: ${err}`);
+						}
+					}
 					ctx.log.info(`[markdown-wiki] Admin deleted attachment: ${attachment_path}`);
 
 					return {

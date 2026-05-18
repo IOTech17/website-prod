@@ -93,6 +93,8 @@ for (const f of SHARED_FILES) {
 console.log();
 if (errors > 0) {
 	console.log(red(`✗ ${errors} source file(s) missing — check theme-iotech-v3`));
+	console.log();
+	process.exit(1);
 }
 if (dry) {
 	console.log(bold(yellow(`  ${copied} file(s) would be updated, ${skipped} already in sync.\n`)));

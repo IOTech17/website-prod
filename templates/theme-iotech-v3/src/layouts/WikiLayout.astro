@@ -178,6 +178,8 @@ const wikiApiKey = import.meta.env.WIKI_API_KEY || "";
 		const path = createPathInput.value.trim();
 		if (!path) { showCreateError("Le chemin est requis."); return; }
 		if (!path.endsWith(".md")) { showCreateError('Le chemin doit se terminer par ".md".'); return; }
+		if (path.startsWith("/")) { showCreateError('Le chemin ne peut pas commencer par "/".'); return; }
+		if (path.split("/").some(s => s === ".." || s === "." || s === "")) { showCreateError('Le chemin ne peut pas contenir ".", ".." ou des segments vides.'); return; }
 
 		createSubmit.disabled = true;
 		createSubmit.textContent = "Création…";
@@ -244,6 +246,7 @@ const wikiApiKey = import.meta.env.WIKI_API_KEY || "";
 	async function createFolder() {
 		const name = folderName.value.trim().replace(RE_TRAILING_SLASHES, "");
 		if (!name) { showFolderError("Le nom du dossier est requis."); return; }
+		if (name === "." || name === "..") { showFolderError('Le nom ne peut pas être "." ou "..".'); return; }
 		if (name.includes("/")) { showFolderError("Utilisez des sous-chemins dans le nom (ex: Docs/Guide)."); return; }
 
 		folderSubmit.disabled = true;
