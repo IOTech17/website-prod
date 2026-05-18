@@ -12,6 +12,7 @@ export function wikiPlugin(): PluginDescriptor {
 		format: "standard",
 		entrypoint: "@iotech/markdown-wiki/sandbox",
 		capabilities: ["content:read", "media:write"],
+		adminPages: [{ path: "/", label: "Wiki", icon: "book" }],
 		storage: {
 			notes: {
 				indexes: ["path", "visibility", "updatedAt"],
