@@ -12,8 +12,9 @@ export function SecretInputElementComponent({
 	onAction: (interaction: BlockInteraction) => void;
 	onChange?: (actionId: string, value: unknown) => void;
 }) {
+	const isReadOnly = element.initial_value !== undefined || element.readonly === true;
 	const [value, setValue] = useState("");
-	const [editing, setEditing] = useState(!element.has_value);
+	const [editing, setEditing] = useState(!element.has_value && !isReadOnly);
 
 	const handleValueChange = useCallback(
 		(v: string) => {
@@ -26,11 +27,11 @@ export function SecretInputElementComponent({
 	);
 
 	const handleFocus = useCallback(() => {
-		if (!editing) {
+		if (!editing && !isReadOnly) {
 			setEditing(true);
 			setValue("");
 		}
-	}, [editing]);
+	}, [editing, isReadOnly]);
 
 	const handleBlur = useCallback(() => {
 		if (!onChange && value) {
@@ -44,6 +45,18 @@ export function SecretInputElementComponent({
 			setEditing(false);
 		}
 	}, [onChange, onAction, element.action_id, value, element.has_value]);
+
+	// Read-only display with initial_value: pass real value so eye button reveals it
+	if (element.initial_value !== undefined) {
+		return (
+			<SensitiveInput
+				label={element.label}
+				value={element.initial_value}
+				readOnly
+				placeholder={element.placeholder}
+			/>
+		);
+	}
 
 	if (!editing) {
 		return (

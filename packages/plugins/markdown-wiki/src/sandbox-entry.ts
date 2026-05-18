@@ -974,6 +974,22 @@ export default definePlugin({
 												}
 											: {}),
 									},
+									...(keyEntry
+										? [
+												{
+													type: "button" as const,
+													label: "🗑️ Supprimer la clé",
+													action_id: "do_delete_key",
+													style: "danger" as const,
+													confirm: {
+														title: "Supprimer la clé ?",
+														text: "La synchronisation Obsidian et l'accès aux notes privées seront désactivés.",
+														confirm: "Supprimer",
+														deny: "Annuler",
+													},
+												},
+											]
+										: []),
 									{ type: "button", label: "← Retour", action_id: "nav_list" },
 								],
 							},
@@ -996,27 +1012,65 @@ export default definePlugin({
 							{ type: "header", text: "🔑 Nouvelle clé API générée" },
 							{ type: "divider" },
 							{
-								type: "section",
-								text: "⚠️ **Copiez cette clé maintenant** — elle ne sera plus affichée après avoir quitté cette page.",
+								type: "banner",
+								title: "Copiez cette clé maintenant",
+								description:
+									"Elle ne sera plus affichée après avoir quitté cette page. Révélez-la avec l'icône 👁, puis sélectionnez et copiez.",
+								variant: "alert",
 							},
 							{
-								type: "section",
-								text: `\`\`\`\n${newKey}\n\`\`\``,
-							},
-							{ type: "divider" },
-							{
-								type: "section",
-								text: "**Étapes suivantes :**\n1. Dans Obsidian : collez cette clé dans les réglages du plugin Wiki Sync\n2. Dans votre .env : ajoutez `WIKI_API_KEY=${newKey}`\n3. Redémarrez le serveur de dev si nécessaire",
-							},
-							{
-								type: "actions",
-								elements: [
-									{ type: "button", label: "← Retour à la configuration", action_id: "nav_config" },
-									{ type: "button", label: "📋 Liste des notes", action_id: "nav_list" },
+								type: "form",
+								block_id: "key_display",
+								fields: [
+									{
+										type: "secret_input",
+										action_id: "key_value",
+										label: "Clé API",
+										initial_value: newKey,
+									},
 								],
+								submit: { label: "← Retour à la configuration", action_id: "nav_config" },
+							},
+							{
+								type: "section",
+								text: "**Étapes suivantes :**\n1. Dans Obsidian : réglages du plugin Wiki Sync → coller la clé\n2. Dans votre `.env` : `WIKI_API_KEY=<clé>`\n3. Redémarrez le serveur de dev",
 							},
 						],
 						toast: { message: "Clé API générée", type: "success" },
+					};
+				}
+
+				// ── Action: delete API key ──────────────────────────────────
+				if (interaction.action_id === "do_delete_key") {
+					await storage.config.delete("api_key_entry");
+					ctx.log.info("[markdown-wiki] API key deleted via admin");
+					return {
+						blocks: [
+							{ type: "header", text: "⚙️ Configuration — Clé API" },
+							{ type: "divider" },
+							{
+								type: "section",
+								text: "⚠️ Aucune clé API configurée. Générez une clé pour activer la synchronisation Obsidian et l'accès aux notes privées.",
+							},
+							{
+								type: "section",
+								text: "La clé API est utilisée comme header **X-Wiki-Key: \\<clé\\>** dans :\n- Le plugin Obsidian (lecture + sync deux sens)\n- Les requêtes admin server-side (var d'env WIKI_API_KEY)",
+							},
+							{ type: "divider" },
+							{
+								type: "actions",
+								elements: [
+									{
+										type: "button",
+										label: "🔑 Générer une clé API",
+										action_id: "do_rotate_key",
+										style: "primary",
+									},
+									{ type: "button", label: "← Retour", action_id: "nav_list" },
+								],
+							},
+						],
+						toast: { message: "Clé API supprimée", type: "success" },
 					};
 				}
 

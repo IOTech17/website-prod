@@ -61,6 +61,10 @@ export interface SecretInputElement {
 	label: string;
 	placeholder?: string;
 	has_value?: boolean;
+	/** Pre-filled value to display (masked by default, reveal with eye button). Implies readOnly. */
+	initial_value?: string;
+	/** Prevent editing — only reveal/copy is allowed. */
+	readonly?: boolean;
 }
 
 export interface CheckboxElement {
