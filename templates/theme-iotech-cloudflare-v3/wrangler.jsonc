@@ -8,6 +8,7 @@
 		{
 			"binding": "DB",
 			"database_name": "theme-iotech",
+			"database_id": "c7e4fd3c-fc92-4751-b3d6-20b840b551e3",
 		},
 	],
 	"r2_buckets": [
