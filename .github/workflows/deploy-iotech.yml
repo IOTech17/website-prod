@@ -39,11 +39,7 @@ jobs:
       - name: Build packages
         run: pnpm build
 
-      - name: Build Cloudflare Workers theme
-        run: pnpm --filter @iotech/theme-iotech-cloudflare build
-
       - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          workingDirectory: templates/theme-iotech-cloudflare-v3
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: pnpm --filter @iotech/theme-iotech-cloudflare deploy
