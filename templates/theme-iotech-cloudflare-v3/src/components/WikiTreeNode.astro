@@ -43,7 +43,7 @@ const visibilityBadge: Record<string, string> = {
 	</details>
 ) : (
 	<a
-		href={`/${wikiSlug}/${encodeURIComponent(node.note!.path)}`}
+		href={`/${wikiSlug}/${node.note!.path.split("/").map((s: string) => encodeURIComponent(s)).join("/")}`}
 		class={`wiki-note-link ${isActive ? "active" : ""}`}
 		aria-current={isActive ? "page" : undefined}
 	>
