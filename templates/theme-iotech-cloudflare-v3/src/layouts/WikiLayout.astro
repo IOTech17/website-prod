@@ -26,8 +26,56 @@ const { title, description, tree, currentPath = "", totalNotes, wikiSlug = "wiki
 					</svg>
 					Wiki
 				</a>
-				<span class="wiki-sidebar-count">{totalNotes} note{totalNotes > 1 ? "s" : ""}</span>
+				<div style="display:flex;align-items:center;gap:0.4rem">
+					<span class="wiki-sidebar-count">{totalNotes} note{totalNotes > 1 ? "s" : ""}</span>
+					{isAdmin && (
+						<>
+							<button id="wiki-new-btn" class="wiki-new-btn" title="Nouvelle note" aria-label="Nouvelle note">+</button>
+							<button id="wiki-folder-btn" class="wiki-new-btn" title="Nouveau dossier" aria-label="Nouveau dossier">📁</button>
+						</>
+					)}
+				</div>
 			</div>
+
+			{isAdmin && (
+				<div id="wiki-folder-panel" class="wiki-create-panel" hidden>
+					<div class="wiki-create-title">Nouveau dossier</div>
+					<input
+						type="text"
+						id="wiki-folder-name"
+						class="wiki-create-input"
+						placeholder="Nom-du-dossier"
+						autocomplete="off"
+						spellcheck="false"
+					/>
+					<div class="wiki-create-hint">Crée un README.md dans le dossier pour le conserver même vide.</div>
+					<div id="wiki-folder-error" class="wiki-create-error" hidden></div>
+					<div class="wiki-create-actions">
+						<button id="wiki-folder-submit" class="btn btn-primary" style="font-size:0.75rem;padding:0.4rem 0.9rem">Créer</button>
+						<button id="wiki-folder-cancel" class="btn btn-ghost" style="font-size:0.75rem;padding:0.4rem 0.9rem">Annuler</button>
+					</div>
+				</div>
+			)}
+
+			{isAdmin && (
+				<div id="wiki-create-panel" class="wiki-create-panel" hidden>
+					<div class="wiki-create-title">Nouvelle note</div>
+					<input
+						type="text"
+						id="wiki-create-path"
+						class="wiki-create-input"
+						placeholder="Dossier/Nom-de-la-note.md"
+						autocomplete="off"
+						spellcheck="false"
+					/>
+					<div class="wiki-create-hint">Ex : Guide/Installation.md</div>
+					<div id="wiki-create-error" class="wiki-create-error" hidden></div>
+					<div class="wiki-create-actions">
+						<button id="wiki-create-submit" class="btn btn-primary" style="font-size:0.75rem;padding:0.4rem 0.9rem">Créer</button>
+						<button id="wiki-create-cancel" class="btn btn-ghost" style="font-size:0.75rem;padding:0.4rem 0.9rem">Annuler</button>
+					</div>
+				</div>
+			)}
 
 			<div class="wiki-search-wrapper">
 				<input type="search" id="wiki-search" placeholder="Rechercher… (Ctrl+K)" autocomplete="off" aria-label="Rechercher dans le wiki" />
@@ -48,23 +96,33 @@ const { title, description, tree, currentPath = "", totalNotes, wikiSlug = "wiki
 </Base>
 
 <script define:vars={{ wikiSlug }}>
+	const RE_MD_EXT_I = /\.md$/i;
+	const RE_SLUG_SEPS = /[-_]/g;
+	const RE_TRAILING_SLASHES = /\/+$/;
+
+	function encodeWikiPath(path) {
+		return path.split("/").map(s => encodeURIComponent(s)).join("/");
+	}
+
+	// ── Recherche ──────────────────────────────────────────────────────────
 	const input = document.getElementById("wiki-search");
 	const results = document.getElementById("wiki-search-results");
-	let timer;
+	let searchTimer;
 
 	input?.addEventListener("input", e => {
-		clearTimeout(timer);
+		clearTimeout(searchTimer);
 		const q = e.target.value.trim();
 		if (!q) { results.innerHTML = ""; results.hidden = true; return; }
-		timer = setTimeout(async () => {
+		searchTimer = setTimeout(async () => {
 			try {
-				const res = await fetch(`/api/wiki/search?q=${encodeURIComponent(q)}&limit=10`);
+				const res = await fetch(`/_emdash/api/plugins/markdown-wiki/search?q=${encodeURIComponent(q)}&limit=10`);
 				const data = await res.json();
-				if (!data.results?.length) {
+				const items = data?.data?.results || data?.results || [];
+				if (!items.length) {
 					results.innerHTML = `<div class="wiki-search-empty">Aucun résultat</div>`;
 				} else {
-					results.innerHTML = data.results.map(r => `
-						<a href="/${wikiSlug}/${encodeURIComponent(r.path)}" class="wiki-search-result">
+					results.innerHTML = items.map(r => `
+						<a href="/${wikiSlug}/${encodeWikiPath(r.path)}" class="wiki-search-result">
 							<span class="wiki-search-title">${r.title}</span>
 							<span class="wiki-search-path">${r.path}</span>
 						</a>
@@ -83,6 +141,139 @@ const { title, description, tree, currentPath = "", totalNotes, wikiSlug = "wiki
 		if ((e.ctrlKey || e.metaKey) && e.key === "k") { e.preventDefault(); input?.focus(); }
 		if (e.key === "Escape") { results.hidden = true; input?.blur(); }
 	});
+
+	// ── Nouvelle note ──────────────────────────────────────────────────────
+	const newBtn = document.getElementById("wiki-new-btn");
+	const createPanel = document.getElementById("wiki-create-panel");
+	const createPathInput = document.getElementById("wiki-create-path");
+	const createSubmit = document.getElementById("wiki-create-submit");
+	const createCancel = document.getElementById("wiki-create-cancel");
+	const createError = document.getElementById("wiki-create-error");
+
+	newBtn?.addEventListener("click", () => {
+		createPanel.hidden = !createPanel.hidden;
+		if (!createPanel.hidden) createPathInput.focus();
+	});
+
+	createCancel?.addEventListener("click", () => {
+		createPanel.hidden = true;
+		createPathInput.value = "";
+		if (createError) createError.hidden = true;
+	});
+
+	function showCreateError(msg) {
+		if (!createError) return;
+		createError.textContent = msg;
+		createError.hidden = false;
+	}
+
+	async function createNote() {
+		const path = createPathInput.value.trim();
+		if (!path) { showCreateError("Le chemin est requis."); return; }
+		if (!path.endsWith(".md")) { showCreateError('Le chemin doit se terminer par ".md".'); return; }
+
+		createSubmit.disabled = true;
+		createSubmit.textContent = "Création…";
+		if (createError) createError.hidden = true;
+
+		const title = path.split("/").pop().replace(RE_MD_EXT_I, "").replace(RE_SLUG_SEPS, " ");
+
+		try {
+			const res = await fetch("/_emdash/api/plugins/markdown-wiki/notes/create", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "X-EmDash-Request": "1" },
+				body: JSON.stringify({ path, content: `# ${title}\n\n`, visibility: "public" }),
+			});
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err?.error?.message || `Erreur ${res.status}`);
+			}
+			window.location.href = `/${wikiSlug}/${encodeWikiPath(path)}?edit=1`;
+		} catch (e) {
+			showCreateError(e.message);
+			createSubmit.disabled = false;
+			createSubmit.textContent = "Créer";
+		}
+	}
+
+	createSubmit?.addEventListener("click", createNote);
+	createPathInput?.addEventListener("keydown", e => {
+		if (e.key === "Enter") createNote();
+		if (e.key === "Escape") { createPanel.hidden = true; createPathInput.value = ""; }
+	});
+
+	// ── Nouveau dossier ────────────────────────────────────────────────────
+	const folderBtn    = document.getElementById("wiki-folder-btn");
+	const folderPanel  = document.getElementById("wiki-folder-panel");
+	const folderName   = document.getElementById("wiki-folder-name");
+	const folderSubmit = document.getElementById("wiki-folder-submit");
+	const folderCancel = document.getElementById("wiki-folder-cancel");
+	const folderError  = document.getElementById("wiki-folder-error");
+
+	folderBtn?.addEventListener("click", () => {
+		// Fermer l'autre panneau si ouvert
+		if (createPanel) createPanel.hidden = true;
+		folderPanel.hidden = !folderPanel.hidden;
+		if (!folderPanel.hidden) folderName.focus();
+	});
+
+	// Fermer le panneau dossier quand on ouvre le panneau note
+	newBtn?.addEventListener("click", () => {
+		if (folderPanel) folderPanel.hidden = true;
+	});
+
+	folderCancel?.addEventListener("click", () => {
+		folderPanel.hidden = true;
+		folderName.value = "";
+		if (folderError) folderError.hidden = true;
+	});
+
+	function showFolderError(msg) {
+		if (!folderError) return;
+		folderError.textContent = msg;
+		folderError.hidden = false;
+	}
+
+	async function createFolder() {
+		const name = folderName.value.trim().replace(RE_TRAILING_SLASHES, "");
+		if (!name) { showFolderError("Le nom du dossier est requis."); return; }
+		if (name.includes("/")) { showFolderError("Utilisez des sous-chemins dans le nom (ex: Docs/Guide)."); return; }
+
+		folderSubmit.disabled = true;
+		folderSubmit.textContent = "Création…";
+		if (folderError) folderError.hidden = true;
+
+		const readmePath = `${name}/README.md`;
+		const title = name.replace(RE_SLUG_SEPS, " ");
+
+		try {
+			const res = await fetch("/_emdash/api/plugins/markdown-wiki/notes/create", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "X-EmDash-Request": "1" },
+				body: JSON.stringify({
+					path: readmePath,
+					content: `# ${title}\n\nNotes dans ce dossier.\n`,
+					visibility: "public",
+				}),
+			});
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err?.error?.message || `Erreur ${res.status}`);
+			}
+			const encoded = readmePath.split("/").map(s => encodeURIComponent(s)).join("/");
+			window.location.href = `/${wikiSlug}/${encoded}?edit=1`;
+		} catch (e) {
+			showFolderError(e.message);
+			folderSubmit.disabled = false;
+			folderSubmit.textContent = "Créer";
+		}
+	}
+
+	folderSubmit?.addEventListener("click", createFolder);
+	folderName?.addEventListener("keydown", e => {
+		if (e.key === "Enter") createFolder();
+		if (e.key === "Escape") { folderPanel.hidden = true; folderName.value = ""; }
+	});
 </script>
 
 <style is:global>
@@ -93,6 +284,15 @@ const { title, description, tree, currentPath = "", totalNotes, wikiSlug = "wiki
 .wiki-sidebar-header { display: flex; align-items: center; justify-content: space-between; padding: 0.85rem 1rem; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .wiki-sidebar-title { display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-sans); font-size: 0.82rem; font-weight: 700; color: var(--text-0); text-decoration: none; }
 .wiki-sidebar-count { font-size: 0.65rem; color: var(--text-2); }
+.wiki-new-btn { appearance: none; -webkit-appearance: none; min-width: 18px; height: 18px; border-radius: 3px; border: 1px solid var(--border); background: transparent; color: var(--text-2); font-size: 0.75rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0 2px; transition: all 0.1s; flex-shrink: 0; }
+.wiki-new-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-glow, rgba(255,100,50,0.08)); }
+.wiki-create-panel { padding: 0.75rem; border-bottom: 1px solid var(--border); background: var(--bg-2); flex-shrink: 0; }
+.wiki-create-title { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-2); margin-bottom: 0.4rem; }
+.wiki-create-input { width: 100%; background: var(--bg-1); border: 1px solid var(--border); border-radius: 3px; padding: 0.3rem 0.5rem; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-0); outline: none; }
+.wiki-create-input:focus { border-color: var(--accent); }
+.wiki-create-hint { font-size: 0.62rem; color: var(--text-2); margin: 0.25rem 0 0.5rem; }
+.wiki-create-error { font-size: 0.7rem; color: #e53e3e; margin-bottom: 0.4rem; }
+.wiki-create-actions { display: flex; gap: 0.4rem; }
 
 .wiki-search-wrapper { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); flex-shrink: 0; position: relative; }
 #wiki-search { width: 100%; background: var(--bg-2); border: 1px solid var(--border); border-radius: 4px; padding: 0.38rem 0.6rem; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-0); outline: none; }
