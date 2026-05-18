@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - "templates/theme-iotech-cloudflare-v3/**"
+      - "templates/theme-iotech-v3/**"
       - "packages/core/**"
       - "packages/admin/**"
       - "packages/auth/**"
@@ -19,9 +20,19 @@ permissions:
   contents: read
 
 jobs:
+  qa:
+    name: Parity Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4.2.2
+
+      - name: Verify theme parity (v3 ↔ cloudflare-v3)
+        run: node templates/theme-iotech-cloudflare-v3/parity-check.mjs
+
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
+    needs: qa
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4.2.2
