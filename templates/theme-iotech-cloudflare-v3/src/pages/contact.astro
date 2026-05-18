@@ -3,50 +3,113 @@ import Base from "../layouts/Base.astro";
 ---
 
 <Base title="Contact" description="Contactez IØTech pour vos besoins informatiques en Charente-Maritime.">
-	<div class="content-container" style="padding-top:3rem;padding-bottom:3rem">
-		<div class="page-header" style="padding-top:0">
-			<h1 class="page-title">Contact</h1>
-			<p class="page-subtitle">Disponible du lundi au vendredi — réponse sous 24h.</p>
+	<section class="page-hero contact-hero-centered">
+		<div class="page-hero-inner">
+			<p class="page-eyebrow">IØTECH</p>
+			<h1 class="page-title">Nous contacter</h1>
+			<p class="page-subtitle-hero">Un projet, une panne ou une question ? Réponse rapide pour les PME et indépendants.</p>
 		</div>
+	</section>
 
-		<div style="display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:start">
-			<div class="contact-form">
-				<form method="POST" action="/_emdash/api/forms/contact">
+	<div class="contact-outer">
+		<div class="contact-form-card">
+			<form method="POST" action="/_emdash/api/forms/contact">
+				<div class="contact-name-row">
 					<div class="form-group">
-						<label class="form-label" for="name">Nom / Entreprise</label>
-						<input type="text" id="name" name="name" class="form-input" placeholder="ACME Sarl" required />
+						<input type="text" id="firstname" name="firstname" class="form-input" placeholder="Prénom" />
 					</div>
 					<div class="form-group">
-						<label class="form-label" for="email">Email</label>
-						<input type="email" id="email" name="email" class="form-input" placeholder="contact@exemple.fr" required />
+						<input type="text" id="name" name="name" class="form-input" placeholder="Nom" required />
 					</div>
-					<div class="form-group">
-						<label class="form-label" for="subject">Sujet</label>
-						<input type="text" id="subject" name="subject" class="form-input" placeholder="Demande de devis, panne…" />
-					</div>
-					<div class="form-group">
-						<label class="form-label" for="message">Message</label>
-						<textarea id="message" name="message" class="form-textarea" placeholder="Décrivez votre besoin…" required></textarea>
-					</div>
-					<button type="submit" class="btn btn-primary" style="width:100%">Envoyer le message</button>
-				</form>
-			</div>
+				</div>
+				<div class="form-group">
+					<input type="email" id="email" name="email" class="form-input" placeholder="Email" required />
+				</div>
+				<div class="form-group">
+					<input type="tel" id="phone" name="phone" class="form-input" placeholder="Téléphone" />
+				</div>
+				<div class="form-group">
+					<textarea id="message" name="message" class="form-input" style="min-height:150px;resize:vertical" placeholder="Message" required></textarea>
+				</div>
+				<button type="submit" class="form-submit">Envoyer</button>
+			</form>
 
-			<div style="padding-top:0.5rem;display:flex;flex-direction:column;gap:1rem">
-				{[
-					{ label: "Zone d'intervention", value: "Saint-Pierre-d'Oléron\nCharente-Maritime (17)" },
-					{ label: "Horaires", value: "Lundi – Vendredi\n9h – 18h" },
-					{ label: "Email", value: "contact@iotech17.com", href: "mailto:contact@iotech17.com" },
-				].map(({ label, value, href }) => (
-					<div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem">
-						<div style="font-size:0.65rem;color:var(--text-2);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:0.5rem">{label}</div>
-						{href
-							? <a href={href} style="font-size:0.875rem;color:var(--accent)">{value}</a>
-							: <p style="font-size:0.875rem;color:var(--text-1);white-space:pre-line">{value}</p>
-						}
-					</div>
-				))}
+			<div class="contact-info-block">
+				<p><strong>Adresse :</strong> Saint-Pierre-d'Oléron, Charente-Maritime</p>
+				<p><strong>Téléphone :</strong> <a href="tel:+33600000000">+33 6 00 00 00 00</a></p>
+				<p><strong>Courriel :</strong> <a href="mailto:contact@iotech17.com">contact@iotech17.com</a></p>
 			</div>
 		</div>
 	</div>
 </Base>
+
+<style>
+.contact-outer {
+	background: var(--bg-1);
+	padding: 4rem 1.5rem 6rem;
+}
+.contact-form-card {
+	background: var(--bg-2);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 2.5rem 2rem;
+	width: 100%;
+	max-width: 540px;
+	margin: 0 auto;
+	box-shadow: var(--panel-shadow);
+}
+.contact-name-row {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 1rem;
+}
+.form-group { margin-bottom: 1.25rem; }
+.form-input {
+	width: 100%;
+	padding: 0.75rem 1rem;
+	border: 1px solid var(--border-bright);
+	border-radius: 4px;
+	font-size: 1rem;
+	color: var(--text-0);
+	background: var(--bg-0);
+	transition: border-color 0.12s, box-shadow 0.12s;
+	box-sizing: border-box;
+	font-family: inherit;
+}
+.form-input::placeholder { color: var(--text-2); }
+.form-input:focus {
+	outline: none;
+	border-color: var(--accent);
+	box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.form-submit {
+	padding: 0.75rem 2rem;
+	background: var(--accent);
+	color: #fff;
+	border: none;
+	border-radius: 4px;
+	font-size: 1rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background 0.12s;
+	font-family: inherit;
+}
+.form-submit:hover { background: var(--accent-dim); }
+.contact-info-block {
+	margin-top: 2rem;
+	padding-top: 1.5rem;
+	border-top: 1px solid var(--border);
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	font-size: 0.9rem;
+	color: var(--text-1);
+}
+.contact-info-block a { color: var(--accent); text-decoration: none; }
+.contact-info-block a:hover { text-decoration: underline; }
+:global(.contact-hero-centered) { text-align: center; }
+:global(.contact-hero-centered) .page-subtitle-hero { margin: 0 auto; }
+@media (max-width: 480px) {
+	.contact-name-row { grid-template-columns: 1fr; }
+}
+</style>

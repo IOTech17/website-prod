@@ -21,10 +21,10 @@ export default defineConfig({
 	fonts: [
 		{
 			provider: fontProviders.google(),
-			name: "Syne",
+			name: "Inter",
 			cssVariable: "--font-sans",
-			weights: [400, 600, 700, 800],
-			fallbacks: ["sans-serif"],
+			weights: [400, 500, 600, 700],
+			fallbacks: ["system-ui", "sans-serif"],
 		},
 		{
 			provider: fontProviders.google(),

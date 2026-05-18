@@ -16,13 +16,17 @@ if (Astro.cache?.enabled) Astro.cache.set(cacheHint);
 ---
 
 <Base title="Blog">
-	<div class="container">
-		<div class="page-header">
+	<section class="page-hero">
+		<div class="page-hero-inner">
+			<p class="page-eyebrow">Blog</p>
 			<h1 class="page-title">Actualités</h1>
+			<p class="page-subtitle-hero">Actualités, conseils et bonnes pratiques informatiques pour PME et indépendants.</p>
 		</div>
+	</section>
 
+	<div class="page-shell">
 		{posts.length > 0 ? (
-			<div class="posts-grid">
+			<div class="posts-grid" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr))">
 				{posts.map(post => <PostCard post={post} />)}
 			</div>
 		) : (

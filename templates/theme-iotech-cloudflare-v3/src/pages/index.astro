@@ -1,7 +1,7 @@
 ---
 import Base from "../layouts/Base.astro";
-import PostCard from "../components/PostCard.astro";
 import ServiceCard from "../components/ServiceCard.astro";
+import PostCard from "../components/PostCard.astro";
 import { getEmDashCollection, getSiteSettings } from "emdash";
 
 const [
@@ -22,31 +22,37 @@ if (Astro.cache?.enabled) Astro.cache.set(servicesCH);
 ---
 
 <Base title={settings.title} description={settings.tagline}>
+	<!-- Hero -->
 	<section class="hero">
-		<div class="container">
+		<div class="hero-inner">
 			<p class="hero-eyebrow">Prestataire informatique PME</p>
-			<h1>L'informatique de confiance<br />pour votre entreprise</h1>
-			<p class="hero-lead">{settings.tagline}</p>
-			<div class="hero-actions">
+			<h1 class="hero-title">L'informatique de confiance pour votre entreprise</h1>
+			<p class="hero-desc">{settings.tagline}</p>
+			<div class="hero-ctas">
 				<a href="/contact" class="btn btn-primary">Nous contacter</a>
-				<a href="/services" class="btn btn-ghost">Voir nos services</a>
-			</div>
-			<div class="hero-meta">
-				<span>📅 Depuis 2020</span>
-				<span>📍 Saint-Pierre-d'Oléron</span>
-				<span>🗺️ Charente-Maritime</span>
-				<span>⚡ Assistance rapide</span>
 			</div>
 		</div>
 	</section>
 
+	<!-- Reassurance bar -->
+	<div class="reassurance">
+		<div class="reassurance-inner">
+			<span>Depuis 2020</span>
+			<span class="sep" aria-hidden="true">·</span>
+			<span>Saint-Pierre-d'Oléron</span>
+			<span class="sep" aria-hidden="true">·</span>
+			<span>Charente-Maritime</span>
+			<span class="sep" aria-hidden="true">·</span>
+			<span>Assistance rapide</span>
+		</div>
+	</div>
+
+	<!-- Services -->
 	{services.length > 0 && (
-		<section class="section">
+		<section class="services">
 			<div class="container">
-				<div class="section-header">
-					<h2 class="section-title">Nos services</h2>
-					<p class="section-subtitle">Une offre complète pour couvrir tous vos besoins informatiques.</p>
-				</div>
+				<h2 class="section-title">Nos services</h2>
+				<p class="section-subtitle">Une offre complète pour couvrir tous vos besoins informatiques.</p>
 				<div class="services-grid">
 					{services.map(service => <ServiceCard service={service} />)}
 				</div>
@@ -54,29 +60,27 @@ if (Astro.cache?.enabled) Astro.cache.set(servicesCH);
 		</section>
 	)}
 
-	<hr class="divider" />
-
+	<!-- Blog -->
 	{posts.length > 0 && (
-		<section class="section-sm">
+		<section class="blog">
 			<div class="container">
-				<div class="section-header flex items-center" style="justify-content:space-between">
+				<div class="blog-header">
 					<h2 class="section-title">Actualités</h2>
-					<a href="/posts" class="btn btn-ghost" style="font-size:0.75rem">Tous les articles →</a>
+					<a href="/posts" class="blog-all">Tous les articles →</a>
 				</div>
-				<div class="posts-grid">
+				<div class="blog-grid">
 					{posts.map(post => <PostCard post={post} />)}
 				</div>
 			</div>
 		</section>
 	)}
 
-	<section class="section">
-		<div class="container">
-			<div class="cta-section">
-				<h2>Un projet ? Une panne ? Une question ?</h2>
-				<p>Notre équipe est disponible pour vous répondre rapidement.</p>
-				<a href="/contact" class="btn btn-primary">Contactez-nous</a>
-			</div>
+	<!-- CTA final -->
+	<section class="cta-final">
+		<div class="cta-final-inner">
+			<h2>Un projet ? Une panne ? Une question ?</h2>
+			<p>Notre équipe est disponible pour vous répondre rapidement.</p>
+			<a href="/contact" class="btn-hero-primary">Contactez-nous</a>
 		</div>
 	</section>
 </Base>

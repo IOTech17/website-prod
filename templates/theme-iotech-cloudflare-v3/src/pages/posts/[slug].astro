@@ -1,7 +1,7 @@
 ---
 import Base from "../../layouts/Base.astro";
 import { getEmDashEntry, decodeSlug } from "emdash";
-import { PortableText } from "emdash/ui";
+import { PortableText, Image } from "emdash/ui";
 
 const slug = decodeSlug(Astro.params.slug);
 if (!slug) return Astro.redirect("/404");
@@ -33,6 +33,11 @@ const formattedDate = post.data.publishedAt
 					<div class="article-meta">Publié le {formattedDate}</div>
 				)}
 			</header>
+			{post.data.cover_image && (
+				<div class="article-cover">
+					<Image image={post.data.cover_image} />
+				</div>
+			)}
 			<div class="article-body">
 				<PortableText value={post.data.body} />
 			</div>
@@ -41,3 +46,17 @@ const formattedDate = post.data.publishedAt
 		</article>
 	</div>
 </Base>
+
+<style>
+.article-cover {
+	margin-bottom: 2rem;
+	border-radius: var(--radius-lg);
+	overflow: hidden;
+	aspect-ratio: 16/9;
+}
+.article-cover img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+</style>

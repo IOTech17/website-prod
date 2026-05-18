@@ -1,21 +1,109 @@
 ---
 import Base from "../layouts/Base.astro";
-import { getEmDashEntry } from "emdash";
-import { PortableText } from "emdash/ui";
-
-const { entry: page } = await getEmDashEntry("pages", "a-propos");
 ---
 
 <Base title="À propos" description="En savoir plus sur IØTech, votre prestataire informatique en Charente-Maritime.">
-	<div class="content-container" style="padding-top:3rem;padding-bottom:3rem">
-		<div class="page-header" style="padding-top:0">
-			<h1 class="page-title">{page?.data.title || "À propos"}</h1>
-		</div>
-		<div class="article-body">
-			{page
-				? <PortableText value={page.data.body} />
-				: <p class="text-muted">Contenu à venir.</p>
-			}
+	<div class="about-page">
+		<header class="about-header">
+			<div class="about-header-inner">
+				<p class="eyebrow">À propos de IØTech</p>
+				<h1 class="about-title">Vincent Bariteau, informaticien indépendant</h1>
+				<p class="about-subtitle">Prestataire de confiance pour les PME et indépendants de l'île d'Oléron et de la Charente-Maritime.</p>
+			</div>
+		</header>
+
+		<div class="about-content">
+			<section class="story-section">
+				<div class="story-grid">
+					<div class="story-text">
+						<h2 class="section-heading">Mon histoire</h2>
+						<p>Tout commença lors du Noël en 2001 où j'eus mon premier ordinateur. Dès lors, l'informatique ne me quitta plus. Autodidacte passionné, je passai mes années à démonter, comprendre, réparer et assembler — transformant chaque panne en apprentissage.</p>
+						<p>Après des années à aider famille, amis et voisins à résoudre leurs problèmes informatiques, il devint évident que cette passion pouvait devenir un métier à part entière. En 2020, je franchis le pas et fondai IØTech à Saint-Pierre-d'Oléron.</p>
+						<p>Mon objectif est simple : apporter aux petites entreprises de Charente-Maritime le même niveau de service et d'expertise que celui dont bénéficient les grandes structures, à des tarifs adaptés à leur réalité.</p>
+						<p>Depuis lors, j'interviens auprès d'artisans, de commerçants, de professions libérales et d'associations pour qu'ils puissent se concentrer sur leur cœur de métier, l'informatique en moins.</p>
+					</div>
+					<div class="story-photo">
+						<div class="photo-wrapper">
+							<img
+								src="/vincent%20profile.jpg"
+								alt="Vincent Bariteau — IØTech"
+								class="profile-photo"
+								onerror="this.parentElement.classList.add('photo-placeholder')"
+							/>
+						</div>
+						<div class="photo-caption">
+							<strong>Vincent Bariteau</strong>
+							<span>Fondateur — IØTech</span>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<section class="expertise-section">
+				<h2 class="section-heading">Domaines d'expertise</h2>
+				<div class="expertise-grid">
+					<div class="expertise-group">
+						<h3 class="expertise-category">Infrastructure &amp; Réseau</h3>
+						<ul class="expertise-list">
+							<li>Installation et configuration réseau (filaire, Wi-Fi)</li>
+							<li>Mise en place de VPN et pare-feu</li>
+							<li>Administration de serveurs Windows et Linux</li>
+							<li>NAS, sauvegardes et plans de continuité</li>
+							<li>Supervision et monitoring réseau</li>
+						</ul>
+					</div>
+					<div class="expertise-group">
+						<h3 class="expertise-category">Cybersécurité</h3>
+						<ul class="expertise-list">
+							<li>Audit de sécurité informatique</li>
+							<li>Mise en place de solutions antivirus/EDR</li>
+							<li>Sensibilisation du personnel (phishing, mots de passe)</li>
+							<li>Chiffrement des données sensibles</li>
+							<li>Plan de reprise d'activité (PRA)</li>
+						</ul>
+					</div>
+					<div class="expertise-group">
+						<h3 class="expertise-category">Assistance &amp; Dépannage</h3>
+						<ul class="expertise-list">
+							<li>Support utilisateurs en présentiel ou à distance</li>
+							<li>Dépannage postes, serveurs et périphériques</li>
+							<li>Récupération de données</li>
+							<li>Migration et installation de logiciels métier</li>
+							<li>Optimisation et nettoyage de systèmes</li>
+						</ul>
+					</div>
+					<div class="expertise-group">
+						<h3 class="expertise-category">Web &amp; Conseils</h3>
+						<ul class="expertise-list">
+							<li>Création de sites vitrines et e-commerce</li>
+							<li>Hébergement et maintenance de sites web</li>
+							<li>Conseil en achat de matériel informatique</li>
+							<li>Migration vers le cloud (Microsoft 365, Google Workspace)</li>
+							<li>Accompagnement à la transformation numérique</li>
+						</ul>
+					</div>
+				</div>
+			</section>
+
+			<section class="zone-section">
+				<div class="zone-inner">
+					<div class="zone-text">
+						<h2 class="section-heading">Zone d'intervention</h2>
+						<p>Basé à Saint-Pierre-d'Oléron, j'interviens sur l'ensemble de l'île d'Oléron et en Charente-Maritime (17).</p>
+						<ul class="zone-list">
+							<li>Île d'Oléron (Saint-Pierre, Saint-Trojan, Le Château, Dolus…)</li>
+							<li>Rochefort et agglomération</li>
+							<li>Saintes et Saintonge</li>
+							<li>La Rochelle et environs</li>
+							<li>Intervention à distance possible partout en France</li>
+						</ul>
+					</div>
+					<div class="zone-cta">
+						<p class="zone-cta-label">Un projet ? Une urgence ?</p>
+						<a href="/contact" class="btn-contact">Nous contacter</a>
+					</div>
+				</div>
+			</section>
 		</div>
 	</div>
 </Base>
