@@ -1,6 +1,7 @@
 name: Deploy IØTech to Cloudflare Workers
 
 on:
+  workflow_dispatch: # allows manual trigger from GitHub Actions UI
   push:
     branches: [main]
     paths:
