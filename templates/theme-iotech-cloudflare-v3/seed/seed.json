@@ -58,8 +58,7 @@
 	],
 	"menus": [
 		{
-			"slug": "header",
-			"name": "Navigation principale",
+			"name": "header",
 			"label": "Navigation principale",
 			"items": [
 				{ "label": "Accueil", "url": "/", "type": "custom" },
@@ -71,19 +70,19 @@
 			]
 		},
 		{
-			"slug": "footer-nav",
-			"name": "Navigation pied de page",
+			"name": "footer-nav",
 			"label": "Navigation pied de page",
 			"items": [
 				{ "label": "Accueil", "url": "/", "type": "custom" },
 				{ "label": "Blog", "url": "/posts", "type": "custom" },
 				{ "label": "Wiki", "url": "/wiki", "type": "custom" },
-				{ "label": "À propos", "url": "/a-propos", "type": "custom" }
+				{ "label": "À propos", "url": "/a-propos", "type": "custom" },
+				{ "label": "Services", "url": "/services", "type": "custom" },
+				{ "label": "Contact", "url": "/contact", "type": "custom" }
 			]
 		},
 		{
-			"slug": "footer-contact",
-			"name": "Contact pied de page",
+			"name": "footer-contact",
 			"label": "Contact pied de page",
 			"items": [
 				{ "label": "Contact", "url": "/contact", "type": "custom" },
