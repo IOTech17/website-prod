@@ -11,6 +11,11 @@ const PLUGIN = `${BASE}/_emdash/api/plugins/markdown-wiki`;
 const RE_B64_CHUNKS = /.{1,20}/g;
 // eslint-disable-next-line no-control-regex
 const RE_CTRL = /[\x00-\x1f\x7f]/;
+const RE_XSS_SCRIPT = /<script[^>]*>alert/;
+const RE_XSS_JS_HREF = /href=['"]javascript:/i;
+const RE_XSS_ONERROR = /onerror\s*=/;
+const RE_XSS_VBS_HREF = /href=['"]vbscript:/i;
+const RE_XSS_DATA_SRC = /src=['"]data:/i;
 
 let sessionCookie = "";
 
@@ -336,6 +341,19 @@ async function testWikiPublicRoutes() {
 	);
 }
 
+// ── Plugin Wiki — cleanup stale QA notes ──────────────────────────────────
+
+async function cleanupQANotes() {
+	if (!wikiApiKey) return 0;
+	const { data } = await pluginGetWithKey("/notes", wikiApiKey);
+	const notes = data?.data?.notes || data?.notes || [];
+	const qaNotes = notes.filter((n) => n.path.startsWith("__qa-"));
+	for (const n of qaNotes) {
+		await pluginPostWithKey("/notes/delete", { path: n.path }, wikiApiKey).catch(() => {});
+	}
+	return qaNotes.length;
+}
+
 // ── Plugin Wiki — CRUD cycle ───────────────────────────────────────────────
 
 async function testWikiCRUD() {
@@ -371,6 +389,12 @@ async function testWikiCRUD() {
 			);
 			return;
 		}
+	}
+
+	// Clean up any __qa-* notes left over from a previous crashed test run
+	const cleaned = await cleanupQANotes();
+	if (cleaned > 0) {
+		log("✓", GREEN, `Cleanup — ${cleaned} note(s) QA préexistante(s) supprimée(s)`);
 	}
 
 	const TEST_PATH = `__qa-test__/Test-QA-${Date.now()}.md`;
@@ -1583,6 +1607,84 @@ async function testWikiAttachmentSecurity() {
 	});
 }
 
+// ── Plugin Wiki — sécurité XSS rendu ─────────────────────────────────────
+
+async function testWikiXSS() {
+	console.log(`\n${CYAN}${BOLD}── Plugin Wiki — sécurité XSS rendu ────────────────${RESET}`);
+
+	if (!wikiApiKey) {
+		warned++;
+		log("⚠", YELLOW, "Clé API manquante — tests XSS ignorés");
+		return;
+	}
+
+	const ts = Date.now();
+	const XSS_PATH = `__qa-xss__/XSS-Test-${ts}.md`;
+
+	const xssContent = [
+		"# XSS Test",
+		"",
+		"<script>alert('xss-script')</script>",
+		"",
+		"[clic](javascript:alert('xss-href'))",
+		"",
+		'<img src="x" onerror="alert(\'xss-img\')">',
+		"",
+		"[vbs](vbscript:alert('xss-vbs'))",
+		"",
+		"![data](data:text/html,<script>alert(1)</script>)",
+		"",
+		"**contenu légitime** pour confirmer que le rendu fonctionne.",
+	].join("\n");
+
+	await pluginPostWithKey(
+		"/notes/create",
+		{ path: XSS_PATH, content: xssContent, visibility: "public" },
+		wikiApiKey,
+	);
+
+	const encodedPath = XSS_PATH.split("/").map(encodeURIComponent).join("/");
+	const res = await get(`/wiki/${encodedPath}`);
+
+	if (res.status !== 200) {
+		warned++;
+		log("⚠", YELLOW, "Page note XSS inaccessible — tests XSS ignorés", `Status ${res.status}`);
+		await pluginPostWithKey("/notes/delete", { path: XSS_PATH }, wikiApiKey).catch(() => {});
+		return;
+	}
+
+	const html = res.text;
+
+	await check("XSS — <script> non exécutable dans le rendu HTML", async () => {
+		if (RE_XSS_SCRIPT.test(html))
+			return { error: "Balise <script> non échappée dans le HTML rendu" };
+	});
+
+	await check("XSS — javascript: URI absent des liens rendus", async () => {
+		if (RE_XSS_JS_HREF.test(html))
+			return { error: 'href="javascript:" présent dans le HTML rendu' };
+	});
+
+	await check("XSS — onerror= absent du HTML rendu", async () => {
+		if (RE_XSS_ONERROR.test(html)) return { error: "Attribut onerror= présent dans le HTML rendu" };
+	});
+
+	await check("XSS — vbscript: URI absent des liens rendus", async () => {
+		if (RE_XSS_VBS_HREF.test(html)) return { error: 'href="vbscript:" présent dans le HTML rendu' };
+	});
+
+	await check("XSS — data: URI absent des images rendues", async () => {
+		if (RE_XSS_DATA_SRC.test(html)) return { error: "data: URI dans src d'image rendu" };
+	});
+
+	await check("XSS — contenu légitime rendu malgré filtrage XSS", async () => {
+		if (!html.includes("<strong>") && !html.includes("<b>"))
+			return { warn: "Balise bold absente — le filtrage XSS pourrait casser le rendu légitime" };
+	});
+
+	await pluginPostWithKey("/notes/delete", { path: XSS_PATH }, wikiApiKey).catch(() => {});
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -1620,6 +1722,7 @@ async function main() {
 	await testWikiSyncEdgeCases();
 	await testWikiAdminBlockKit();
 	await testWikiAttachmentSecurity();
+	await testWikiXSS();
 
 	console.log(`\n${CYAN}${BOLD}── Résumé ──────────────────────────────────────────${RESET}`);
 	console.log(

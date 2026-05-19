@@ -128,12 +128,59 @@ for (const themeDir of [V3, CF]) {
 	}
 }
 
+// ─── astro.config.mjs plugin config validation ─────────────────────────────────
+
+console.log(bold("\n╔══════════════════════════════════════════════════╗"));
+console.log(bold("║  Plugin Config — cloudflare-v3 astro.config.mjs  ║"));
+console.log(bold("╚══════════════════════════════════════════════════╝\n"));
+
+let configErrors = 0;
+
+const cfConfigPath = resolve(CF, "astro.config.mjs");
+if (!existsSync(cfConfigPath)) {
+	console.log(`  ${red("MISSING")}  astro.config.mjs not found in theme-iotech-cloudflare-v3`);
+	configErrors++;
+} else {
+	const cfConfig = readFileSync(cfConfigPath, "utf8");
+
+	// wikiPlugin must NOT be in sandboxed: [] — requires paid Worker Loader binding
+	if (/sandboxed\s*:\s*\[[^\]]*wikiPlugin[^\]]*\]/.test(cfConfig)) {
+		console.log(
+			`  ${red("BAD")}      cloudflare-v3: wikiPlugin() is in sandboxed: [] — requires Worker Loader binding (paid). Move to plugins: []`,
+		);
+		configErrors++;
+	} else {
+		console.log(`  ${green("OK")}       cloudflare-v3: wikiPlugin() not in sandboxed: []`);
+	}
+
+	// wikiPlugin must be registered somewhere in the config
+	if (!cfConfig.includes("wikiPlugin()")) {
+		console.log(
+			`  ${red("MISSING")}  cloudflare-v3: wikiPlugin() not found in astro.config.mjs — wiki will not work`,
+		);
+		configErrors++;
+	} else {
+		console.log(`  ${green("OK")}       cloudflare-v3: wikiPlugin() present in config`);
+	}
+
+	// auditLogPlugin should also be present (warn only — not critical)
+	if (!cfConfig.includes("auditLogPlugin()")) {
+		console.log(`  ${yellow("WARN")}     cloudflare-v3: auditLogPlugin() not found in config`);
+	} else {
+		console.log(`  ${green("OK")}       cloudflare-v3: auditLogPlugin() present in config`);
+	}
+}
+
 // ─── summary ───────────────────────────────────────────────────────────────────
 
 console.log();
-const totalErrors = diffs + missing + seedErrors;
+const totalErrors = diffs + missing + seedErrors + configErrors;
 if (totalErrors === 0) {
-	console.log(bold(green(`✓ All ${SHARED_FILES.length} shared files identical. Seed valid.\n`)));
+	console.log(
+		bold(
+			green(`✓ All ${SHARED_FILES.length} shared files identical. Seed and plugin config valid.\n`),
+		),
+	);
 	process.exit(0);
 } else {
 	if (missing > 0) console.log(red(`✗ ${missing} file(s) missing`));
@@ -142,6 +189,10 @@ if (totalErrors === 0) {
 		console.log(yellow("  Run: node templates/theme-iotech-cloudflare-v3/sync-themes.mjs"));
 	}
 	if (seedErrors > 0) console.log(red(`✗ ${seedErrors} seed issue(s) — fix seed.json menu names`));
+	if (configErrors > 0)
+		console.log(
+			red(`✗ ${configErrors} config issue(s) — fix astro.config.mjs plugin registration`),
+		);
 	console.log();
 	process.exit(1);
 }

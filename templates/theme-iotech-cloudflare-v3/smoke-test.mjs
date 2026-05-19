@@ -168,11 +168,37 @@ async function checkWiki() {
 	}
 
 	// No "Plugin route not found" bleed into any HTML page
-	const wikiPage = await get("/wiki");
-	if (wikiPage.text.includes("Plugin route not found")) {
+	if (idx.text.includes("Plugin route not found")) {
 		fail("Wiki page clean (no plugin error)", '"Plugin route not found" visible in HTML');
 	} else {
 		ok("Wiki page clean (no plugin error)");
+	}
+
+	// Verify notes actually appear in the page HTML — catches self-referential fetch failures
+	// where the API works externally but the SSR page silently gets empty data
+	if (api.status === 200) {
+		try {
+			const apiData = JSON.parse(api.text);
+			const notes = apiData?.data?.notes || apiData?.notes || [];
+			if (notes.length > 0) {
+				const firstNote = notes[0];
+				const noteTitle = firstNote?.title || "";
+				if (noteTitle && idx.text.includes(noteTitle)) {
+					ok(`Wiki page shows note content (direct dispatch working)`);
+				} else if (noteTitle) {
+					fail(
+						"Wiki page empty despite notes in DB",
+						`"${noteTitle}" not found in HTML — self-referential fetch may be silently failing`,
+					);
+				} else {
+					warn("Wiki notes exist but have no title — cannot verify page content");
+				}
+			} else {
+				warn("Wiki API returns 0 notes — cannot verify page renders notes");
+			}
+		} catch {
+			warn("Wiki notes API response not parseable");
+		}
 	}
 
 	// Wiki RSS
@@ -334,6 +360,42 @@ async function checkAssets() {
 	}
 }
 
+async function checkSecurityHeaders() {
+	console.log(bold("\n  Security headers"));
+
+	const r = await get("/", { noBody: true });
+	if (!r.ok) {
+		warn("Skipping security header checks — homepage unavailable");
+		return;
+	}
+
+	// X-Content-Type-Options prevents MIME sniffing
+	const xcto = r.headers.get("x-content-type-options");
+	if (!xcto) {
+		warn("X-Content-Type-Options", "header missing — add to Cloudflare or Astro middleware");
+	} else if (xcto.toLowerCase().includes("nosniff")) {
+		ok("X-Content-Type-Options: nosniff");
+	} else {
+		warn("X-Content-Type-Options", `unexpected value: "${xcto}"`);
+	}
+
+	// X-Frame-Options prevents clickjacking
+	const xfo = r.headers.get("x-frame-options");
+	if (!xfo) {
+		warn("X-Frame-Options", "header missing");
+	} else {
+		ok(`X-Frame-Options: ${xfo}`);
+	}
+
+	// Referrer-Policy controls how much referrer info is sent
+	const rp = r.headers.get("referrer-policy");
+	if (!rp) {
+		warn("Referrer-Policy", "header missing");
+	} else {
+		ok(`Referrer-Policy: ${rp}`);
+	}
+}
+
 // ─── main ──────────────────────────────────────────────────────────────────────
 
 console.log(bold("\n╔══════════════════════════════════════════════════╗"));
@@ -347,6 +409,7 @@ await checkContactForm();
 await checkRss();
 await checkWiki();
 await checkSecurity();
+await checkSecurityHeaders();
 await checkAssets();
 
 console.log();
