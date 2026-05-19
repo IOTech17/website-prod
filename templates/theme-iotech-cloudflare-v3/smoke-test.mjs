@@ -184,6 +184,49 @@ async function checkWiki() {
 	}
 }
 
+async function checkContactForm() {
+	console.log(bold("\n  Contact form"));
+
+	const r = await get("/api/contact", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			name: "Smoke Test",
+			email: "smoke-test@iotech17.com",
+			message: `Vérification automatique smoke test — ${new Date().toISOString()}`,
+		}),
+	});
+
+	if (r.status === 200) {
+		try {
+			const data = JSON.parse(r.text);
+			if (data.success) {
+				ok("Contact form POST → success");
+			} else {
+				fail("Contact form POST", `success:false — ${data.error ?? "unknown"}`);
+			}
+		} catch {
+			fail("Contact form POST", "Response not valid JSON");
+		}
+	} else if (r.status === 503) {
+		fail("Contact form POST", "503 — collection messages non configurée");
+	} else {
+		fail("Contact form POST", `HTTP ${r.status}`);
+	}
+
+	// Validation: missing name must return 400
+	const bad = await get("/api/contact", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ email: "test@example.com", message: "test" }),
+	});
+	if (bad.status === 400) {
+		ok("Contact form: champ manquant → 400");
+	} else {
+		fail("Contact form: champ manquant", `HTTP ${bad.status}, attendu 400`);
+	}
+}
+
 async function checkSecurity() {
 	console.log(bold("\n  Security"));
 
@@ -300,6 +343,7 @@ console.log(dim(`  Target: ${BASE_URL}\n`));
 
 await checkPages();
 await checkNavigation();
+await checkContactForm();
 await checkRss();
 await checkWiki();
 await checkSecurity();

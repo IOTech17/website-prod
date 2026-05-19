@@ -190,6 +190,77 @@ async function testBlog() {
 	}
 }
 
+// ── Contact form ───────────────────────────────────────────────────────────
+
+async function testContactForm() {
+	console.log(`\n${CYAN}${BOLD}── Contact form ────────────────────────────────────${RESET}`);
+
+	await check("POST /api/contact — FormData valide → 200 + success", async () => {
+		const form = new FormData();
+		form.append("firstname", "QA");
+		form.append("name", "Test");
+		form.append("email", "qa-test@example.com");
+		form.append("message", "Message de test automatique QA.");
+		const res = await fetch(`${BASE}/api/contact`, { method: "POST", body: form });
+		if (res.status === 503) return { warn: "Collection messages non configurée — seed requis" };
+		if (res.status !== 200) return { error: `Status ${res.status}` };
+		const data = await res.json().catch(() => null);
+		if (!data?.success) return { error: `Réponse inattendue: ${JSON.stringify(data)}` };
+	});
+
+	await check("POST /api/contact — JSON valide → 200 + success", async () => {
+		const res = await fetch(`${BASE}/api/contact`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				name: "QA-JSON",
+				email: "qa-json@example.com",
+				message: "Test soumission JSON.",
+			}),
+		});
+		if (res.status === 503) return { warn: "Collection messages non configurée" };
+		if (res.status !== 200) return { error: `Status ${res.status}` };
+		const data = await res.json().catch(() => null);
+		if (!data?.success) return { error: `Réponse inattendue: ${JSON.stringify(data)}` };
+	});
+
+	await check("POST /api/contact — nom manquant → 400", async () => {
+		const res = await fetch(`${BASE}/api/contact`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ email: "test@example.com", message: "Test." }),
+		});
+		if (res.status !== 400) return { error: `Attendu 400, reçu ${res.status}` };
+	});
+
+	await check("POST /api/contact — email invalide → 400", async () => {
+		const res = await fetch(`${BASE}/api/contact`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "Test", email: "pas-un-email", message: "Test." }),
+		});
+		if (res.status !== 400) return { error: `Attendu 400, reçu ${res.status}` };
+	});
+
+	await check("POST /api/contact — message manquant → 400", async () => {
+		const res = await fetch(`${BASE}/api/contact`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "Test", email: "test@example.com" }),
+		});
+		if (res.status !== 400) return { error: `Attendu 400, reçu ${res.status}` };
+	});
+
+	await check("POST /api/contact — email manquant → 400", async () => {
+		const res = await fetch(`${BASE}/api/contact`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "Test", message: "Test." }),
+		});
+		if (res.status !== 400) return { error: `Attendu 400, reçu ${res.status}` };
+	});
+}
+
 // ── RSS ────────────────────────────────────────────────────────────────────
 
 async function testRSS() {
@@ -1546,6 +1617,7 @@ async function main() {
 	await testPages();
 	await testNavigation();
 	await testBlog();
+	await testContactForm();
 	await testRSS();
 	await testAssets();
 	await testWikiPublicRoutes();
