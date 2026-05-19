@@ -24,7 +24,9 @@ export interface Post {
 	slug: string | null;
 	status: string;
 	title: string;
+	date_publication?: string;
 	excerpt?: string;
+	cover_image?: { id: string; src?: string; alt?: string; width?: number; height?: number; provider?: string; previewUrl?: string; meta?: Record<string, unknown> };
 	body?: PortableTextBlock[];
 	createdAt: Date;
 	updatedAt: Date;
