@@ -46,6 +46,24 @@ const SLASH_RE = /\//g;
 const LEADING_AT_RE = /^@/;
 const emdash_SCOPE_RE = /^@emdash-cms\//;
 
+// Minimal emdash shim used when bundling plugin sandbox entries.
+// Must export everything a sandbox-entry.ts may import from "emdash" at value level.
+// Type-only imports (PluginContext, etc.) disappear at compile time and need no entry here.
+const EMDASH_BUNDLE_SHIM = `\
+export const definePlugin = (d) => d;
+export class PluginRouteError extends Error {
+  constructor(code, message, status = 500, details) {
+    super(message); this.name = "PluginRouteError"; this.code = code; this.status = status; this.details = details;
+  }
+  static badRequest(m, d) { return new PluginRouteError("BAD_REQUEST", m, 400, d); }
+  static unauthorized(m = "Unauthorized") { return new PluginRouteError("UNAUTHORIZED", m, 401); }
+  static forbidden(m = "Forbidden") { return new PluginRouteError("FORBIDDEN", m, 403); }
+  static notFound(m = "Not found") { return new PluginRouteError("NOT_FOUND", m, 404); }
+  static conflict(m, d) { return new PluginRouteError("CONFLICT", m, 409, d); }
+  static internal(m = "Internal error") { return new PluginRouteError("INTERNAL_ERROR", m, 500); }
+}
+`;
+
 export const bundleCommand = defineCommand({
 	meta: {
 		name: "bundle",
@@ -253,7 +271,7 @@ export const bundleCommand = defineCommand({
 								await mkdir(probeShimDir, { recursive: true });
 								await writeFile(
 									join(probeShimDir, "emdash.mjs"),
-									"export const definePlugin = (d) => d;\n",
+									EMDASH_BUNDLE_SHIM,
 								);
 								await build({
 									config: false,
@@ -368,7 +386,7 @@ export const bundleCommand = defineCommand({
 				// format, and PluginContext is a type-only import that disappears.
 				const shimDir = join(tmpDir, "shims");
 				await mkdir(shimDir, { recursive: true });
-				await writeFile(join(shimDir, "emdash.mjs"), "export const definePlugin = (d) => d;\n");
+				await writeFile(join(shimDir, "emdash.mjs"), EMDASH_BUNDLE_SHIM);
 
 				await build({
 					config: false,
