@@ -4,15 +4,14 @@ import { getEmDashEntry } from "emdash";
 import { PortableText } from "emdash/ui";
 
 const { entry: page, cacheHint } = await getEmDashEntry("pages", "contact");
-if (!page) return Astro.redirect("/404");
-if (Astro.cache?.enabled) Astro.cache.set(cacheHint);
+if (page && Astro.cache?.enabled) Astro.cache.set(cacheHint);
 ---
 
-<Base title={page.data.title ?? "Contact"} description="Contactez IØTech pour vos besoins informatiques en Charente-Maritime.">
+<Base title={page?.data.title ?? "Contact"} description="Contactez IØTech pour vos besoins informatiques en Charente-Maritime.">
 	<section class="page-hero contact-hero-centered">
 		<div class="page-hero-inner">
 			<p class="page-eyebrow">IØTECH</p>
-			<h1 class="page-title">{page.data.title ?? "Contact"}</h1>
+			<h1 class="page-title">{page?.data.title ?? "Contact"}</h1>
 			<p class="page-subtitle-hero">Un projet, une panne ou une question ? Réponse rapide pour les PME et indépendants.</p>
 		</div>
 	</section>
@@ -41,7 +40,15 @@ if (Astro.cache?.enabled) Astro.cache.set(cacheHint);
 			</form>
 
 			<div class="contact-info-block">
-				<PortableText value={page.data.body ?? []} />
+				{page?.data.body ? (
+					<PortableText value={page.data.body} />
+				) : (
+					<>
+						<p><strong>Adresse :</strong> Saint-Pierre-d'Oléron, Charente-Maritime</p>
+						<p><strong>Téléphone :</strong> <a href="tel:+33600000000">+33 6 00 00 00 00</a></p>
+						<p><strong>Courriel :</strong> <a href="mailto:contact@iotech17.com">contact@iotech17.com</a></p>
+					</>
+				)}
 			</div>
 		</div>
 	</div>
