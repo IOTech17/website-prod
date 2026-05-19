@@ -8,6 +8,7 @@
 
 const BASE = process.argv[2] || "http://localhost:4321";
 const PLUGIN = `${BASE}/_emdash/api/plugins/markdown-wiki`;
+const RE_B64_CHUNKS = /.{1,20}/g;
 
 let sessionCookie = "";
 
@@ -348,9 +349,12 @@ async function testWikiCRUD() {
 		if (!note.title.includes("Modifié")) return { error: `Titre non mis à jour: ${note.title}` };
 	});
 
-	// HISTORY après update
+	// HISTORY après update — requires API key (history may contain old private revisions)
 	await check("GET /history?path= — historique présent après update", async () => {
-		const { status, data } = await pluginGet(`/history?path=${encodeURIComponent(TEST_PATH)}`);
+		const { status, data } = await pluginGetWithKey(
+			`/history?path=${encodeURIComponent(TEST_PATH)}`,
+			wikiApiKey,
+		);
 		if (status !== 200) return { error: `Status ${status}` };
 		const hist = data?.data?.history || data?.history;
 		if (!Array.isArray(hist)) return { error: `Format inattendu: ${JSON.stringify(data)}` };
@@ -536,8 +540,21 @@ async function testWikiPage() {
 		if (notes.length === 0) return { warn: "Aucune note — seeder ou créer via admin" };
 	});
 
-	if (notes.length > 0) {
-		const note = notes[0];
+	// Filter out orphaned notes with invalid paths (double slash, leading slash, etc.)
+	// eslint-disable-next-line no-control-regex
+	const RE_CTRL = /[\x00-\x1f\x7f]/;
+	const validNotes = notes.filter(
+		(n) =>
+			n.path &&
+			n.path.endsWith(".md") &&
+			!n.path.includes("//") &&
+			!n.path.startsWith("/") &&
+			!RE_CTRL.test(n.path) &&
+			!n.path.split("/").some((s) => s === ".." || s === "." || s === ""),
+	);
+
+	if (validNotes.length > 0) {
+		const note = validNotes[0];
 		const encodedPath = note.path
 			.split("/")
 			.map((s) => encodeURIComponent(s))
@@ -896,6 +913,620 @@ async function testWikiAttachments() {
 	}
 }
 
+// ── Plugin Wiki — rendu Markdown ──────────────────────────────────────────
+
+async function testWikiRendering() {
+	console.log(`\n${CYAN}${BOLD}── Plugin Wiki — rendu Markdown ────────────────────${RESET}`);
+
+	if (!wikiApiKey) {
+		warned++;
+		log("⚠", YELLOW, "Clé API manquante — tests rendu ignorés");
+		return;
+	}
+
+	const ts = Date.now();
+	const RENDER_PREFIX = `__qa-render__`;
+
+	// ── blockquotes ──────────────────────────────────────────────────────────
+	const BLOCKQUOTE_PATH = `${RENDER_PREFIX}/blockquote-${ts}.md`;
+	await pluginPostWithKey(
+		"/notes/create",
+		{ path: BLOCKQUOTE_PATH, content: "# BQ\n\n> Ceci est une citation.", visibility: "public" },
+		wikiApiKey,
+	);
+
+	await check("Rendu — blockquote rendu en <blockquote>", async () => {
+		const encodedPath = BLOCKQUOTE_PATH.split("/").map(encodeURIComponent).join("/");
+		const res = await get(`/wiki/${encodedPath}`);
+		if (res.status !== 200) return { error: `Status ${res.status}` };
+		const html = await res.text();
+		if (!html.includes("<blockquote>"))
+			return { error: "Balise <blockquote> absente du rendu" };
+		if (!html.includes("Ceci est une citation"))
+			return { error: "Texte du blockquote absent" };
+	});
+
+	// ── code block (CRLF) ─────────────────────────────────────────────────────
+	const CRLF_PATH = `${RENDER_PREFIX}/crlf-${ts}.md`;
+	const crlfContent = "# CRLF\r\n\r\n```js\r\nconsole.log('hello');\r\n```";
+	await pluginPostWithKey(
+		"/notes/create",
+		{ path: CRLF_PATH, content: crlfContent, visibility: "public" },
+		wikiApiKey,
+	);
+
+	await check("Rendu — code block avec CRLF rendu en <pre><code>", async () => {
+		const encodedPath = CRLF_PATH.split("/").map(encodeURIComponent).join("/");
+		const res = await get(`/wiki/${encodedPath}`);
+		if (res.status !== 200) return { error: `Status ${res.status}` };
+		const html = await res.text();
+		if (!html.includes("<pre>") && !html.includes("<code"))
+			return { error: "Balise <pre> ou <code> absente" };
+		if (!html.includes("console.log"))
+			return { error: "Contenu du code block absent" };
+	});
+
+	// ── $& dans le contenu (placeholder corruption) ─────────────────────────
+	const DOLLAR_PATH = `${RENDER_PREFIX}/dollar-${ts}.md`;
+	await pluginPostWithKey(
+		"/notes/create",
+		{ path: DOLLAR_PATH, content: "# Dollar\n\n```bash\necho $& $1 $'\n```", visibility: "public" },
+		wikiApiKey,
+	);
+
+	await check("Rendu — $& dans code block non corrompu", async () => {
+		const encodedPath = DOLLAR_PATH.split("/").map(encodeURIComponent).join("/");
+		const res = await get(`/wiki/${encodedPath}`);
+		if (res.status !== 200) return { error: `Status ${res.status}` };
+		const html = await res.text();
+		if (html.includes("%%CODE_") || html.includes("%%INLINE_"))
+			return { error: "Placeholder non restauré dans le HTML final" };
+		if (html.includes("undefinedamp;") || html.includes("&amp;amp;"))
+			return { error: "Double-encodage HTML détecté — probable corruption de $&" };
+	});
+
+	// ── table avec cellule vide ──────────────────────────────────────────────
+	const TABLE_PATH = `${RENDER_PREFIX}/table-${ts}.md`;
+	await pluginPostWithKey(
+		"/notes/create",
+		{
+			path: TABLE_PATH,
+			content: "# Table\n\n| A | B |\n|---|---|\n| x |  |\n",
+			visibility: "public",
+		},
+		wikiApiKey,
+	);
+
+	await check("Rendu — table avec cellule vide contient <table>", async () => {
+		const encodedPath = TABLE_PATH.split("/").map(encodeURIComponent).join("/");
+		const res = await get(`/wiki/${encodedPath}`);
+		if (res.status !== 200) return { error: `Status ${res.status}` };
+		const html = await res.text();
+		if (!html.includes("<table>")) return { error: "Balise <table> absente" };
+		if (!html.includes("<td>")) return { error: "Balise <td> absente" };
+	});
+
+	// ── bold/italic dans liste ───────────────────────────────────────────────
+	const LIST_PATH = `${RENDER_PREFIX}/list-${ts}.md`;
+	await pluginPostWithKey(
+		"/notes/create",
+		{
+			path: LIST_PATH,
+			content: "# Liste\n\n- **gras** item\n- _italique_ item\n",
+			visibility: "public",
+		},
+		wikiApiKey,
+	);
+
+	await check("Rendu — bold/italic dans liste rendu correctement", async () => {
+		const encodedPath = LIST_PATH.split("/").map(encodeURIComponent).join("/");
+		const res = await get(`/wiki/${encodedPath}`);
+		if (res.status !== 200) return { error: `Status ${res.status}` };
+		const html = await res.text();
+		if (!html.includes("<strong>") && !html.includes("<b>"))
+			return { error: "Balise bold absente" };
+		if (!html.includes("<em>") && !html.includes("<i>"))
+			return { error: "Balise italic absente" };
+	});
+
+	// Cleanup
+	for (const p of [BLOCKQUOTE_PATH, CRLF_PATH, DOLLAR_PATH, TABLE_PATH, LIST_PATH]) {
+		await pluginPostWithKey("/notes/delete", { path: p }, wikiApiKey).catch(() => {});
+	}
+}
+
+// ── Plugin Wiki — validation des chemins ──────────────────────────────────
+
+async function testWikiPathValidation() {
+	console.log(`\n${CYAN}${BOLD}── Plugin Wiki — validation des chemins ────────────${RESET}`);
+
+	if (!wikiApiKey) {
+		warned++;
+		log("⚠", YELLOW, "Clé API manquante — tests validation ignorés");
+		return;
+	}
+
+	const invalidPaths = [
+		{ path: ".", label: "chemin '.' (segment point)" },
+		{ path: "..", label: "chemin '..' (remontée)" },
+		{ path: "foo//bar.md", label: "segment vide (double /)" },
+		{ path: "/foo/bar.md", label: "chemin absolu (commence par /)" },
+		{ path: "foo/../bar.md", label: "chemin avec .. (traversée)" },
+		{ path: "foo/./bar.md", label: "chemin avec . (segment point)" },
+		{ path: "foo\x00bar.md", label: "caractère nul (\\x00)" },
+		{ path: "foo\x1fbar.md", label: "caractère contrôle C0 (\\x1f)" },
+		{ path: "foo\x7fbar.md", label: "DEL (\\x7f)" },
+	];
+
+	for (const { path, label } of invalidPaths) {
+		await check(`POST /notes/create — rejeté: ${label}`, async () => {
+			const { status } = await pluginPostWithKey(
+				"/notes/create",
+				{ path, content: "# test\n\ncontenu.", visibility: "public" },
+				wikiApiKey,
+			);
+			if (status === 200) return { error: `Status 200 — chemin invalide accepté: "${path}"` };
+			if (status !== 400) return { warn: `Attendu 400, reçu ${status}` };
+		});
+	}
+
+	await check("POST /notes/get — chemin vide rejeté (400)", async () => {
+		const { status } = await pluginPostWithKey("/notes/get", { path: "" }, wikiApiKey);
+		if (status === 200) return { error: "Chemin vide accepté" };
+	});
+
+	await check("GET /wiki/.. — pas de contenu wiki (traversée normalisée par HTTP)", async () => {
+		// HTTP clients normalize /wiki/.. to / before sending the request — the server
+		// never sees ".." in the path. Verify no wiki note content is served.
+		const res = await get("/wiki/..");
+		if (res.status !== 200) return;
+		const text = await res.text();
+		if (text.includes("wiki-bc")) return { error: "Contenu wiki servi via traversée de chemin" };
+	});
+}
+
+// ── Plugin Wiki — sécurité des mises à jour ───────────────────────────────
+
+async function testWikiFieldInjection() {
+	console.log(`\n${CYAN}${BOLD}── Plugin Wiki — sécurité notes/update ─────────────${RESET}`);
+
+	if (!wikiApiKey) {
+		warned++;
+		log("⚠", YELLOW, "Clé API manquante — tests injection ignorés");
+		return;
+	}
+
+	const ts = Date.now();
+	const INJ_PATH = `__qa-inj__/Note-Injection-${ts}.md`;
+
+	await pluginPostWithKey(
+		"/notes/create",
+		{ path: INJ_PATH, content: "# Injection QA\n\nNote originale.", visibility: "public" },
+		wikiApiKey,
+	);
+
+	await check("POST /notes/update — contenu vide rejeté (400)", async () => {
+		const { status, data } = await pluginPostWithKey(
+			"/notes/update",
+			{ path: INJ_PATH, content: "" },
+			wikiApiKey,
+		);
+		if (status === 200) return { error: "Contenu vide accepté — devrait être rejeté" };
+		if (status !== 400)
+			return { warn: `Attendu 400, reçu ${status}: ${data?.error?.message}` };
+	});
+
+	await check("POST /notes/update — contenu whitespace seul rejeté (400)", async () => {
+		const { status } = await pluginPostWithKey(
+			"/notes/update",
+			{ path: INJ_PATH, content: "   \n\t  " },
+			wikiApiKey,
+		);
+		if (status === 200) return { error: "Contenu whitespace seul accepté" };
+	});
+
+	await check("POST /notes/update — chemin ne peut pas être modifié via 'path injection'", async () => {
+		// Send extra fields that should be ignored
+		const { status, data } = await pluginPostWithKey(
+			"/notes/update",
+			{
+				path: INJ_PATH,
+				content: "# Updated\n\nContenu mis à jour.",
+				id: "injected-id",
+				createdAt: "1970-01-01T00:00:00.000Z",
+				unknownField: "should be ignored",
+			},
+			wikiApiKey,
+		);
+		if (status !== 200)
+			return { error: `Status ${status} — ${data?.error?.message}` };
+		const note = data?.data?.note || data?.note;
+		if (!note) return { error: "Note non retournée" };
+		if (note.id === "injected-id") return { error: "id injecté accepté" };
+		if (note.createdAt === "1970-01-01T00:00:00.000Z")
+			return { error: "createdAt injecté accepté" };
+		if (note.path !== INJ_PATH)
+			return { error: `path modifié: ${note.path}` };
+	});
+
+	await check("POST /notes/update — path invalide rejeté", async () => {
+		const { status } = await pluginPostWithKey(
+			"/notes/update",
+			{ path: "../../../etc/passwd", content: "pwned" },
+			wikiApiKey,
+		);
+		if (status === 200) return { error: "Path traversal accepté" };
+	});
+
+	// Cleanup
+	await pluginPostWithKey("/notes/delete", { path: INJ_PATH }, wikiApiKey).catch(() => {});
+}
+
+// ── Plugin Wiki — edge cases sync & since ─────────────────────────────────
+
+async function testWikiSyncEdgeCases() {
+	console.log(`\n${CYAN}${BOLD}── Plugin Wiki — sync & since edge cases ───────────${RESET}`);
+
+	if (!wikiApiKey) {
+		warned++;
+		log("⚠", YELLOW, "Clé API manquante — tests sync edge cases ignorés");
+		return;
+	}
+
+	// ── notes/since response shape ───────────────────────────────────────────
+	await check("GET /notes/since — champs truncated & pool_overflow séparés", async () => {
+		const { status, data } = await pluginGetWithKey(
+			`/notes/since?since=1970-01-01T00:00:00.000Z&limit=1`,
+			wikiApiKey,
+		);
+		if (status !== 200)
+			return { error: `Status ${status} — ${data?.error?.message || JSON.stringify(data)}` };
+		const body = data?.data || data;
+		if (!("truncated" in body))
+			return { error: "Champ 'truncated' absent de la réponse" };
+		if (!("pool_overflow" in body))
+			return { error: "Champ 'pool_overflow' absent de la réponse" };
+		if (typeof body.truncated !== "boolean")
+			return { error: `'truncated' devrait être boolean, reçu: ${typeof body.truncated}` };
+		if (typeof body.pool_overflow !== "boolean")
+			return { error: `'pool_overflow' devrait être boolean, reçu: ${typeof body.pool_overflow}` };
+	});
+
+	await check("GET /notes/since — 'total' et 'since' présents", async () => {
+		const { status, data } = await pluginGetWithKey(
+			`/notes/since?since=1970-01-01T00:00:00.000Z`,
+			wikiApiKey,
+		);
+		if (status !== 200)
+			return { error: `Status ${status}` };
+		const body = data?.data || data;
+		if (typeof body.total !== "number")
+			return { error: `'total' absent ou non-numérique: ${typeof body.total}` };
+		if (!body.since)
+			return { error: "'since' absent de la réponse" };
+	});
+
+	// ── sync delete_paths > 200 rejeté avant tout write ──────────────────────
+	await check("POST /sync — delete_paths > 200 rejeté (400)", async () => {
+		const tooManyPaths = Array.from({ length: 201 }, (_, i) => `fake/note-${i}.md`);
+		const { status, data } = await pluginPostWithKey(
+			"/sync",
+			{ notes: [], delete_paths: tooManyPaths },
+			wikiApiKey,
+		);
+		if (status === 200) return { error: "201 delete_paths acceptés — devrait être rejeté" };
+		if (status !== 400)
+			return { warn: `Attendu 400, reçu ${status}: ${data?.error?.message}` };
+	});
+
+	await check("POST /sync — delete_paths = 200 accepté", async () => {
+		const exactlyMax = Array.from({ length: 200 }, (_, i) => `__nonexistent__/fake-${i}.md`);
+		const { status } = await pluginPostWithKey(
+			"/sync",
+			{ notes: [], delete_paths: exactlyMax },
+			wikiApiKey,
+		);
+		// 200 or handled gracefully (some might not exist, that's fine)
+		if (status !== 200)
+			return { warn: `200 delete_paths devrait être accepté, reçu ${status}` };
+	});
+
+	// ── sync upsert then verify via since ────────────────────────────────────
+	const ts = Date.now();
+	const SINCE_PATH = `__qa-since__/Note-Since-${ts}.md`;
+	const sinceMarker = new Date().toISOString();
+
+	await pluginPostWithKey(
+		"/notes/create",
+		{ path: SINCE_PATH, content: "# Since Test\n\nNote pour tester since.", visibility: "public" },
+		wikiApiKey,
+	);
+
+	await check("GET /notes/since — note créée apparaît dans le delta", async () => {
+		const { status, data } = await pluginGetWithKey(
+			`/notes/since?since=${encodeURIComponent(sinceMarker)}`,
+			wikiApiKey,
+		);
+		if (status !== 200)
+			return { error: `Status ${status}` };
+		const body = data?.data || data;
+		const notes = body?.notes || [];
+		if (!notes.some((n) => n.path === SINCE_PATH))
+			return { warn: "Note créée absente du delta since — timing issue?" };
+	});
+
+	// Cleanup
+	await pluginPostWithKey("/notes/delete", { path: SINCE_PATH }, wikiApiKey).catch(() => {});
+}
+
+// ── Plugin Wiki — Block Kit admin actions ─────────────────────────────────
+
+async function testWikiAdminBlockKit() {
+	console.log(`\n${CYAN}${BOLD}── Plugin Wiki — Block Kit admin ───────────────────${RESET}`);
+
+	if (!sessionCookie) {
+		const authed = await authenticate();
+		if (!authed) {
+			warned++;
+			log("⚠", YELLOW, "Auth indisponible — tests Block Kit ignorés");
+			return;
+		}
+	}
+
+	const ts = Date.now();
+	const ADM_PATH = `__qa-admin__/AdminNote-${ts}.md`;
+	const ADM_PATH2 = `__qa-admin__/AdminNote-moved-${ts}.md`;
+	let adminNoteId = null;
+
+	// ── do_create ─────────────────────────────────────────────────────────────
+	await check("Admin Block Kit — do_create crée une note", async () => {
+		const { status, data } = await pluginPost("/admin", {
+			action_id: "do_create",
+			values: {
+				path: ADM_PATH,
+				content: "# Admin Test\n\nNote créée via Block Kit.",
+				visibility: "public",
+			},
+		});
+		if (status !== 200)
+			return { error: `Status ${status} — ${data?.error?.message || JSON.stringify(data)}` };
+		const blocks = data?.data?.blocks || data?.blocks || [];
+		const hasSuccess = blocks.some(
+			(b) =>
+				(b.title && b.title.includes("créée")) ||
+				(b.description && b.description.includes("créée")),
+		);
+		if (!hasSuccess)
+			return { warn: `Réponse do_create inattendue: ${JSON.stringify(blocks).slice(0, 200)}` };
+	});
+
+	// Récupère l'id de la note créée pour les tests suivants
+	const createdResult = await pluginPostWithKey("/notes/get", { path: ADM_PATH }, wikiApiKey || "");
+	if (createdResult.status === 200) {
+		adminNoteId = createdResult.data?.data?.note?.id || createdResult.data?.note?.id;
+	}
+
+	// ── do_create — chemin invalide rejeté ────────────────────────────────────
+	await check("Admin Block Kit — do_create avec chemin invalide retourne erreur", async () => {
+		const { status, data } = await pluginPost("/admin", {
+			action_id: "do_create",
+			values: {
+				path: "../../../etc/passwd",
+				content: "pwned",
+				visibility: "public",
+			},
+		});
+		if (status !== 200)
+			return; // 400 would be fine too
+		const blocks = data?.data?.blocks || data?.blocks || [];
+		const hasError = blocks.some((b) => b.variant === "error" || b.type === "banner");
+		if (!hasError)
+			return { error: "Chemin invalide accepté par do_create sans erreur" };
+	});
+
+	// ── nav_edit — ouvre la page d'édition ───────────────────────────────────
+	if (adminNoteId) {
+		await check("Admin Block Kit — nav_edit retourne le formulaire d'édition", async () => {
+			const { status, data } = await pluginPost("/admin", {
+				action_id: "nav_edit",
+				value: JSON.stringify({ note_path: ADM_PATH }),
+			});
+			if (status !== 200)
+				return { error: `Status ${status}` };
+			const blocks = data?.data?.blocks || data?.blocks || [];
+			const hasForm = blocks.some((b) => b.type === "form");
+			if (!hasForm)
+				return { warn: "Formulaire d'édition absent de la réponse" };
+		});
+
+		// ── do_edit — met à jour le contenu ──────────────────────────────────
+		await check("Admin Block Kit — do_edit met à jour le contenu", async () => {
+			const { status, data } = await pluginPost("/admin", {
+				action_id: "do_edit",
+				values: {
+					_note_id: adminNoteId,
+					content: "# Admin Test Modifié\n\nContenu mis à jour via Block Kit.",
+					visibility: "public",
+				},
+			});
+			if (status !== 200)
+				return { error: `Status ${status} — ${data?.error?.message}` };
+			const blocks = data?.data?.blocks || data?.blocks || [];
+			const hasSuccess = blocks.some(
+				(b) => b.title && (b.title.includes("Sauvegardé") || b.title.includes("mis à jour")),
+			);
+			if (!hasSuccess)
+				return { warn: `Réponse do_edit inattendue: ${JSON.stringify(blocks).slice(0, 200)}` };
+		});
+
+		await check("Admin Block Kit — do_edit avec contenu vide retourne erreur", async () => {
+			const { status, data } = await pluginPost("/admin", {
+				action_id: "do_edit",
+				values: { _note_id: adminNoteId, content: "" },
+			});
+			if (status !== 200)
+				return;
+			const blocks = data?.data?.blocks || data?.blocks || [];
+			const hasError = blocks.some((b) => b.variant === "error");
+			if (!hasError) return { error: "Contenu vide accepté par do_edit" };
+		});
+
+		// ── do_move — déplace la note ─────────────────────────────────────────
+		await check("Admin Block Kit — do_move déplace la note", async () => {
+			const { status, data } = await pluginPost("/admin", {
+				action_id: "do_move",
+				values: { _note_id: adminNoteId, new_path: ADM_PATH2 },
+			});
+			if (status !== 200)
+				return { error: `Status ${status} — ${data?.error?.message}` };
+			const blocks = data?.data?.blocks || data?.blocks || [];
+			const hasSuccess = blocks.some(
+				(b) => b.title && (b.title.includes("Déplacée") || b.title.includes("déplacée")),
+			);
+			if (!hasSuccess)
+				return { warn: `Réponse do_move inattendue: ${JSON.stringify(blocks).slice(0, 200)}` };
+		});
+
+		// ── do_delete — supprime la note ──────────────────────────────────────
+		await check("Admin Block Kit — do_delete supprime la note", async () => {
+			const { status, data } = await pluginPost("/admin", {
+				action_id: "do_delete",
+				value: JSON.stringify({ note_path: ADM_PATH2 }),
+			});
+			if (status !== 200)
+				return { error: `Status ${status} — ${data?.error?.message}` };
+			const blocks = data?.data?.blocks || data?.blocks || [];
+			const hasSuccess = blocks.some(
+				(b) => b.title && (b.title.includes("Supprimée") || b.title.includes("supprimée")),
+			);
+			if (!hasSuccess)
+				return { warn: `Réponse do_delete inattendue: ${JSON.stringify(blocks).slice(0, 200)}` };
+		});
+
+		await check("Admin Block Kit — note supprimée introuvable après do_delete", async () => {
+			const { status } = await pluginPostWithKey("/notes/get", { path: ADM_PATH2 }, wikiApiKey || "");
+			if (status === 200) return { error: "Note toujours accessible après do_delete" };
+		});
+	} else {
+		warned++;
+		log("⚠", YELLOW, "do_create a échoué — tests do_edit/do_move/do_delete ignorés");
+		// Cleanup attempt
+		if (wikiApiKey)
+			await pluginPostWithKey("/notes/delete", { path: ADM_PATH }, wikiApiKey).catch(() => {});
+	}
+
+	// ── Admin sans session rejeté ────────────────────────────────────────────
+	await check("POST /admin sans session — rejeté (401)", async () => {
+		const res = await fetch(`${PLUGIN}/admin`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", "X-EmDash-Request": "1" },
+			body: JSON.stringify({ action_id: "nav_list" }),
+		});
+		if (res.status === 200) return { error: "Admin accessible sans session" };
+		if (res.status !== 401 && res.status !== 403)
+			return { warn: `Attendu 401/403, reçu ${res.status}` };
+	});
+}
+
+// ── Plugin Wiki — sécurité des pièces jointes ─────────────────────────────
+
+async function testWikiAttachmentSecurity() {
+	console.log(`\n${CYAN}${BOLD}── Plugin Wiki — sécurité attachments ──────────────${RESET}`);
+
+	if (!wikiApiKey) {
+		warned++;
+		log("⚠", YELLOW, "Clé API manquante — tests attachment security ignorés");
+		return;
+	}
+
+	const ts = Date.now();
+
+	// ── SVG rejeté ────────────────────────────────────────────────────────────
+	await check("POST /attachments/upload — SVG rejeté (400)", async () => {
+		const svgB64 = Buffer.from(
+			'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+		).toString("base64");
+		const res = await fetch(`${PLUGIN}/attachments/upload`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", "X-Wiki-Key": wikiApiKey },
+			body: JSON.stringify({
+				path: `__qa-sec__/xss-${ts}.svg`,
+				filename: `xss-${ts}.svg`,
+				mimeType: "image/svg+xml",
+				data: svgB64,
+			}),
+		});
+		if (res.status === 200) return { error: "SVG accepté — risque XSS" };
+		if (res.status !== 400) return { warn: `Attendu 400, reçu ${res.status}` };
+	});
+
+	// ── mimeType/filename mismatch (svg extension) ────────────────────────────
+	await check("POST /attachments/upload — extension .svg avec image/png rejeté", async () => {
+		const fakeB64 = Buffer.from("fake png data").toString("base64");
+		const res = await fetch(`${PLUGIN}/attachments/upload`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", "X-Wiki-Key": wikiApiKey },
+			body: JSON.stringify({
+				path: `__qa-sec__/disguised-${ts}.svg`,
+				filename: `disguised-${ts}.svg`,
+				mimeType: "image/png",
+				data: fakeB64,
+			}),
+		});
+		// SVG extension should be rejected regardless of declared mimeType
+		if (res.status === 200) return { error: "Fichier .svg avec image/png accepté" };
+	});
+
+	// ── payload trop grand ───────────────────────────────────────────────────
+	await check("POST /attachments/upload — payload > 20MB rejeté (400)", async () => {
+		// Generate a base64 string that exceeds the limit check (>20MB decoded)
+		// 20MB * 4/3 ≈ 27MB of base64. We send 28MB of 'A' chars.
+		const oversizedB64 = "A".repeat(28 * 1024 * 1024);
+		const res = await fetch(`${PLUGIN}/attachments/upload`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", "X-Wiki-Key": wikiApiKey },
+			body: JSON.stringify({
+				path: `__qa-sec__/oversize-${ts}.png`,
+				filename: `oversize-${ts}.png`,
+				mimeType: "image/png",
+				data: oversizedB64,
+			}),
+		});
+		if (res.status === 200) return { error: "Payload > 20MB accepté" };
+		if (res.status !== 400) return { warn: `Attendu 400, reçu ${res.status}` };
+	});
+
+	// ── base64 avec whitespace (MIME multipart) ──────────────────────────────
+	await check("POST /attachments/upload — base64 avec whitespace MIME accepté", async () => {
+		// A 1x1 red PNG, split with newlines every 76 chars (MIME multipart style)
+		const PNG_1X1 =
+			"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==";
+		// Insert newlines every 20 chars to simulate MIME encoding
+		const withNewlines = PNG_1X1.match(RE_B64_CHUNKS)?.join("\n") || PNG_1X1;
+		const res = await fetch(`${PLUGIN}/attachments/upload`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", "X-Wiki-Key": wikiApiKey },
+			body: JSON.stringify({
+				path: `__qa-sec__/b64-ws-${ts}.png`,
+				filename: `b64-ws-${ts}.png`,
+				mimeType: "image/png",
+				data: withNewlines,
+			}),
+		});
+		const data = await res.json().catch(() => null);
+		if (res.status === 400) {
+			const msg = data?.error?.message || "";
+			if (msg.includes("media:write capability not available"))
+				return { warn: "ctx.media non disponible en dev Node.js — OK en Cloudflare Workers" };
+			// Should NOT fail with "invalid base64" — whitespace should be stripped
+			if (msg.toLowerCase().includes("base64") || msg.toLowerCase().includes("invalid"))
+				return { error: `Base64 avec whitespace rejeté: ${msg}` };
+			return { warn: `Status 400 inattendu: ${msg}` };
+		}
+		// 200 means whitespace was stripped correctly
+	});
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -926,6 +1557,12 @@ async function main() {
 	await testWikiDeltaSync();
 	await testWikiSyncDeletePaths();
 	await testWikiAttachments();
+	await testWikiRendering();
+	await testWikiPathValidation();
+	await testWikiFieldInjection();
+	await testWikiSyncEdgeCases();
+	await testWikiAdminBlockKit();
+	await testWikiAttachmentSecurity();
 
 	console.log(`\n${CYAN}${BOLD}── Résumé ──────────────────────────────────────────${RESET}`);
 	console.log(

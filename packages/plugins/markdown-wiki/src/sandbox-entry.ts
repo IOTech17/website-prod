@@ -155,8 +155,8 @@ function validateNotePath(path: string): string | null {
 	if (path.length > 512) return "path must be at most 512 characters";
 	if (RE_INVALID_PATH_CHARS.test(path))
 		return "path must not contain control characters";
-	if (path.split("/").some((s) => s === ".."))
-		return "path must not contain .. segments";
+	if (path.split("/").some((s) => s === ".." || s === "." || s === ""))
+		return "path must not contain .., ., or empty segments (including leading /)";
 	return null;
 }
 
@@ -1125,11 +1125,14 @@ export default definePlugin({
 				}
 
 				// ── Page: liste des notes ──────────────────────────────────
+				// Only show the list when there is no specific action_id to handle,
+				// or when it is explicitly requested. Form submissions (do_create,
+				// do_edit, …) always supply action_id so they never fall into this block.
 				if (
-					!interaction.type ||
+					!interaction.action_id ||
+					interaction.action_id === "nav_list" ||
 					interaction.type === "page_load" ||
-					interaction.page === "list" ||
-					interaction.action_id === "nav_list"
+					interaction.page === "list"
 				) {
 					const result = await storage.notes.query({ limit: 100 });
 					const notes = result.items

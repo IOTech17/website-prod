@@ -77,7 +77,9 @@ const RE_OL         = /((?:^\d+\. .+\n?)+)/gm;
 const RE_OL_PREFIX  = /^\d+\. /;
 const RE_BOLD_ITALIC = /\*\*\*(.+?)\*\*\*/g;
 const RE_BOLD       = /\*\*(.+?)\*\*/g;
+const RE_BOLD_U     = /(?<![a-zA-Z0-9_])__(.+?)__(?![a-zA-Z0-9_])/g;
 const RE_ITALIC     = /\*(.+?)\*/g;
+const RE_ITALIC_U   = /(?<![a-zA-Z0-9_])_(.+?)_(?![a-zA-Z0-9_])/g;
 const RE_STRIKE     = /~~(.+?)~~/g;
 const RE_WIKI_EMBED = /!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 const RE_URL_SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
@@ -197,7 +199,9 @@ function mdToHtml(md: string): string {
 	// <strong>/<em>/<del> (produced by bold/italic/strike) get a <p> wrapper.
 	out = out.replace(RE_PARAGRAPH, "<p>$1</p>");
 	out = out.replace(RE_BOLD_ITALIC, "<strong><em>$1</em></strong>");
+	out = out.replace(RE_BOLD_U, "<strong>$1</strong>");
 	out = out.replace(RE_BOLD, "<strong>$1</strong>");
+	out = out.replace(RE_ITALIC_U, "<em>$1</em>");
 	out = out.replace(RE_ITALIC, "<em>$1</em>");
 	out = out.replace(RE_STRIKE, "<del>$1</del>");
 	// Use function replacements to avoid $& / $` / $' / $$ interpolation in replacement strings
