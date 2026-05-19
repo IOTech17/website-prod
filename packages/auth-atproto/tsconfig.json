@@ -4,7 +4,7 @@
 		"outDir": "./dist",
 		"rootDir": "./src",
 		"noUncheckedIndexedAccess": false,
-		"lib": ["es2023", "DOM", "DOM.Iterable", "esnext.typedarrays"]
+		"lib": ["es2023", "DOM", "DOM.Iterable", "esnext"]
 	},
 	"include": ["src/**/*"],
 	"exclude": ["node_modules", "dist"]
