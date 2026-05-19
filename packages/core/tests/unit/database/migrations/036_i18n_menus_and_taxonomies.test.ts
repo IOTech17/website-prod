@@ -215,7 +215,7 @@ describe("036_i18n_menus_and_taxonomies migration", () => {
 				SELECT taxonomy_id FROM content_taxonomies WHERE entry_id = 'p1' ORDER BY taxonomy_id
 			`.execute(db);
 			// On a fresh install translation_group == id, so values look unchanged.
-			expect(groups.rows.map((r) => r.taxonomy_id).sort()).toEqual(["t1", "t2"]);
+			expect(groups.rows.map((r) => r.taxonomy_id).toSorted()).toEqual(["t1", "t2"]);
 
 			// FK to taxonomies.id is gone: insert via group whose row id differs.
 			await sql`

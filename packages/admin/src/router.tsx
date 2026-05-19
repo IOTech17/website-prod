@@ -973,7 +973,7 @@ function MediaPage() {
 			queryKey: ["media"],
 			queryFn: ({ pageParam }) =>
 				fetchMediaList({
-					cursor: pageParam as string | undefined,
+					cursor: pageParam,
 					limit: 100,
 				}),
 			initialPageParam: undefined as string | undefined,

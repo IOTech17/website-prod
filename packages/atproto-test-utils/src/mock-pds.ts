@@ -302,6 +302,7 @@ function notFound(error: string, message: string): Response {
 function parseDid(value: string | null | undefined): AtprotoDid | null {
 	if (!value) return null;
 	if (!value.startsWith("did:plc:") && !value.startsWith("did:web:")) return null;
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- template literal type narrowing; startsWith checks above guarantee the shape
 	return value as AtprotoDid;
 }
 

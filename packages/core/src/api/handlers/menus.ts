@@ -371,7 +371,7 @@ export async function handleMenuUpdate(
 				matches.map((m) => m.locale),
 			);
 		}
-		const menu = matches[0]!;
+		const menu = matches[0];
 
 		if (input.label) {
 			await db
@@ -426,7 +426,7 @@ export async function handleMenuDelete(
 				matches.map((m) => m.locale),
 			);
 		}
-		const menu = matches[0]!;
+		const menu = matches[0];
 
 		// D1 has FOREIGN KEYS off by default, so the migration's `ON DELETE
 		// CASCADE` won't fire there. Delete items explicitly first — this is
@@ -538,7 +538,7 @@ export async function handleMenuItemCreate(
 				matches.map((m) => m.locale),
 			);
 		}
-		const menu = matches[0]!;
+		const menu = matches[0];
 
 		let sortOrder = input.sortOrder ?? 0;
 		if (input.sortOrder === undefined) {
@@ -628,7 +628,7 @@ export async function handleMenuItemUpdate(
 				matches.map((m) => m.locale),
 			);
 		}
-		const menu = matches[0]!;
+		const menu = matches[0];
 
 		const item = await db
 			.selectFrom("_emdash_menu_items")
@@ -701,7 +701,7 @@ export async function handleMenuItemDelete(
 				matches.map((m) => m.locale),
 			);
 		}
-		const menu = matches[0]!;
+		const menu = matches[0];
 
 		const result = await db
 			.deleteFrom("_emdash_menu_items")
@@ -817,7 +817,7 @@ export async function handleMenuSetItems(
 					ambiguousLocales = matches.map((m) => m.locale);
 					throw ambiguousSentinel;
 				}
-				const menu = matches[0]!;
+				const menu = matches[0];
 
 				await trx.deleteFrom("_emdash_menu_items").where("menu_id", "=", menu.id).execute();
 
@@ -913,7 +913,7 @@ export async function handleMenuItemReorder(
 				matches.map((m) => m.locale),
 			);
 		}
-		const menu = matches[0]!;
+		const menu = matches[0];
 
 		const updatedItems = await withTransaction(db, async (trx) => {
 			for (const item of items) {

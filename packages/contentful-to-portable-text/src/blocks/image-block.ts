@@ -8,6 +8,7 @@ export function transformImageBlock(
 	includes: ContentfulIncludes,
 	key: string,
 ): ArbitraryTypedObject {
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Contentful API returns Record<string,unknown>; shape validated at runtime via optional chaining
 	const assetLink = entry.fields.assetFile as { sys?: { id?: string } } | undefined;
 	const assetId = assetLink?.sys?.id;
 	const asset = assetId ? includes.assets.get(assetId) : undefined;
@@ -23,7 +24,8 @@ export function transformImageBlock(
 			width: asset?.width,
 			height: asset?.height,
 		},
-		linkUrl: entry.fields.linkUrl ? sanitizeUri(entry.fields.linkUrl as string) : undefined,
-		size: (entry.fields.size as string) ?? undefined,
+		linkUrl:
+			typeof entry.fields.linkUrl === "string" ? sanitizeUri(entry.fields.linkUrl) : undefined,
+		size: typeof entry.fields.size === "string" ? entry.fields.size : undefined,
 	};
 }

@@ -29,8 +29,8 @@ export async function throwResponseError(res: Response, fallback: string): Promi
 	if (typeof body === "object" && body !== null && "error" in body) {
 		const { error } = body;
 		if (typeof error === "object" && error !== null && "message" in error) {
-			const { message: msg } = error;
-			if (typeof msg === "string") message = msg;
+			const { message: errorMsg } = error;
+			if (typeof errorMsg === "string") message = errorMsg;
 		}
 	}
 	throw new Error(message || `${fallback}: ${res.statusText}`);

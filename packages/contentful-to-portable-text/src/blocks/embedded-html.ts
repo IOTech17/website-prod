@@ -7,6 +7,6 @@ export function transformEmbeddedHtml(entry: ContentfulEntry, key: string): Arbi
 	return {
 		_type: "htmlBlock",
 		_key: key,
-		html: (entry.fields.customHtml as string) ?? "",
+		html: typeof entry.fields.customHtml === "string" ? entry.fields.customHtml : "",
 	};
 }

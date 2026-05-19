@@ -90,6 +90,7 @@ export class FakeRepo {
 		// ergonomics; the underlying CBOR encode + signing path doesn't care
 		// about the lexicon-validation type narrowings, so we cast at the
 		// boundary rather than forcing every test to import branded types.
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- @atproto/repo branded types; safe at CBOR boundary (see comment above)
 		const op = {
 			action: WriteOpAction.Create,
 			collection,
@@ -109,6 +110,7 @@ export class FakeRepo {
 		rkey: string,
 		value: Record<string, unknown>,
 	): Promise<void> {
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- @atproto/repo branded types; safe at CBOR boundary (see comment above)
 		const op = {
 			action: WriteOpAction.Update,
 			collection,
@@ -125,6 +127,7 @@ export class FakeRepo {
 	 * triggers tombstoning in D1.
 	 */
 	async deleteRecord(collection: string, rkey: string): Promise<void> {
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- @atproto/repo branded types; safe at CBOR boundary (see comment above)
 		const op = {
 			action: WriteOpAction.Delete,
 			collection,

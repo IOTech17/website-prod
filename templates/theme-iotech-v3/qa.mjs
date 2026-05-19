@@ -9,6 +9,8 @@
 const BASE = process.argv[2] || "http://localhost:4321";
 const PLUGIN = `${BASE}/_emdash/api/plugins/markdown-wiki`;
 const RE_B64_CHUNKS = /.{1,20}/g;
+// eslint-disable-next-line no-control-regex
+const RE_CTRL = /[\x00-\x1f\x7f]/;
 
 let sessionCookie = "";
 
@@ -612,8 +614,6 @@ async function testWikiPage() {
 	});
 
 	// Filter out orphaned notes with invalid paths (double slash, leading slash, etc.)
-	// eslint-disable-next-line no-control-regex
-	const RE_CTRL = /[\x00-\x1f\x7f]/;
 	const validNotes = notes.filter(
 		(n) =>
 			n.path &&
@@ -1011,10 +1011,8 @@ async function testWikiRendering() {
 		const res = await get(`/wiki/${encodedPath}`);
 		if (res.status !== 200) return { error: `Status ${res.status}` };
 		const html = await res.text();
-		if (!html.includes("<blockquote>"))
-			return { error: "Balise <blockquote> absente du rendu" };
-		if (!html.includes("Ceci est une citation"))
-			return { error: "Texte du blockquote absent" };
+		if (!html.includes("<blockquote>")) return { error: "Balise <blockquote> absente du rendu" };
+		if (!html.includes("Ceci est une citation")) return { error: "Texte du blockquote absent" };
 	});
 
 	// ── code block (CRLF) ─────────────────────────────────────────────────────
@@ -1033,8 +1031,7 @@ async function testWikiRendering() {
 		const html = await res.text();
 		if (!html.includes("<pre>") && !html.includes("<code"))
 			return { error: "Balise <pre> ou <code> absente" };
-		if (!html.includes("console.log"))
-			return { error: "Contenu du code block absent" };
+		if (!html.includes("console.log")) return { error: "Contenu du code block absent" };
 	});
 
 	// ── $& dans le contenu (placeholder corruption) ─────────────────────────
@@ -1096,8 +1093,7 @@ async function testWikiRendering() {
 		const html = await res.text();
 		if (!html.includes("<strong>") && !html.includes("<b>"))
 			return { error: "Balise bold absente" };
-		if (!html.includes("<em>") && !html.includes("<i>"))
-			return { error: "Balise italic absente" };
+		if (!html.includes("<em>") && !html.includes("<i>")) return { error: "Balise italic absente" };
 	});
 
 	// Cleanup
@@ -1183,8 +1179,7 @@ async function testWikiFieldInjection() {
 			wikiApiKey,
 		);
 		if (status === 200) return { error: "Contenu vide accepté — devrait être rejeté" };
-		if (status !== 400)
-			return { warn: `Attendu 400, reçu ${status}: ${data?.error?.message}` };
+		if (status !== 400) return { warn: `Attendu 400, reçu ${status}: ${data?.error?.message}` };
 	});
 
 	await check("POST /notes/update — contenu whitespace seul rejeté (400)", async () => {
@@ -1196,29 +1191,30 @@ async function testWikiFieldInjection() {
 		if (status === 200) return { error: "Contenu whitespace seul accepté" };
 	});
 
-	await check("POST /notes/update — chemin ne peut pas être modifié via 'path injection'", async () => {
-		// Send extra fields that should be ignored
-		const { status, data } = await pluginPostWithKey(
-			"/notes/update",
-			{
-				path: INJ_PATH,
-				content: "# Updated\n\nContenu mis à jour.",
-				id: "injected-id",
-				createdAt: "1970-01-01T00:00:00.000Z",
-				unknownField: "should be ignored",
-			},
-			wikiApiKey,
-		);
-		if (status !== 200)
-			return { error: `Status ${status} — ${data?.error?.message}` };
-		const note = data?.data?.note || data?.note;
-		if (!note) return { error: "Note non retournée" };
-		if (note.id === "injected-id") return { error: "id injecté accepté" };
-		if (note.createdAt === "1970-01-01T00:00:00.000Z")
-			return { error: "createdAt injecté accepté" };
-		if (note.path !== INJ_PATH)
-			return { error: `path modifié: ${note.path}` };
-	});
+	await check(
+		"POST /notes/update — chemin ne peut pas être modifié via 'path injection'",
+		async () => {
+			// Send extra fields that should be ignored
+			const { status, data } = await pluginPostWithKey(
+				"/notes/update",
+				{
+					path: INJ_PATH,
+					content: "# Updated\n\nContenu mis à jour.",
+					id: "injected-id",
+					createdAt: "1970-01-01T00:00:00.000Z",
+					unknownField: "should be ignored",
+				},
+				wikiApiKey,
+			);
+			if (status !== 200) return { error: `Status ${status} — ${data?.error?.message}` };
+			const note = data?.data?.note || data?.note;
+			if (!note) return { error: "Note non retournée" };
+			if (note.id === "injected-id") return { error: "id injecté accepté" };
+			if (note.createdAt === "1970-01-01T00:00:00.000Z")
+				return { error: "createdAt injecté accepté" };
+			if (note.path !== INJ_PATH) return { error: `path modifié: ${note.path}` };
+		},
+	);
 
 	await check("POST /notes/update — path invalide rejeté", async () => {
 		const { status } = await pluginPostWithKey(
@@ -1253,10 +1249,8 @@ async function testWikiSyncEdgeCases() {
 		if (status !== 200)
 			return { error: `Status ${status} — ${data?.error?.message || JSON.stringify(data)}` };
 		const body = data?.data || data;
-		if (!("truncated" in body))
-			return { error: "Champ 'truncated' absent de la réponse" };
-		if (!("pool_overflow" in body))
-			return { error: "Champ 'pool_overflow' absent de la réponse" };
+		if (!("truncated" in body)) return { error: "Champ 'truncated' absent de la réponse" };
+		if (!("pool_overflow" in body)) return { error: "Champ 'pool_overflow' absent de la réponse" };
 		if (typeof body.truncated !== "boolean")
 			return { error: `'truncated' devrait être boolean, reçu: ${typeof body.truncated}` };
 		if (typeof body.pool_overflow !== "boolean")
@@ -1268,13 +1262,11 @@ async function testWikiSyncEdgeCases() {
 			`/notes/since?since=1970-01-01T00:00:00.000Z`,
 			wikiApiKey,
 		);
-		if (status !== 200)
-			return { error: `Status ${status}` };
+		if (status !== 200) return { error: `Status ${status}` };
 		const body = data?.data || data;
 		if (typeof body.total !== "number")
 			return { error: `'total' absent ou non-numérique: ${typeof body.total}` };
-		if (!body.since)
-			return { error: "'since' absent de la réponse" };
+		if (!body.since) return { error: "'since' absent de la réponse" };
 	});
 
 	// ── sync delete_paths > 200 rejeté avant tout write ──────────────────────
@@ -1286,8 +1278,7 @@ async function testWikiSyncEdgeCases() {
 			wikiApiKey,
 		);
 		if (status === 200) return { error: "201 delete_paths acceptés — devrait être rejeté" };
-		if (status !== 400)
-			return { warn: `Attendu 400, reçu ${status}: ${data?.error?.message}` };
+		if (status !== 400) return { warn: `Attendu 400, reçu ${status}: ${data?.error?.message}` };
 	});
 
 	await check("POST /sync — delete_paths = 200 accepté", async () => {
@@ -1298,8 +1289,7 @@ async function testWikiSyncEdgeCases() {
 			wikiApiKey,
 		);
 		// 200 or handled gracefully (some might not exist, that's fine)
-		if (status !== 200)
-			return { warn: `200 delete_paths devrait être accepté, reçu ${status}` };
+		if (status !== 200) return { warn: `200 delete_paths devrait être accepté, reçu ${status}` };
 	});
 
 	// ── sync upsert then verify via since ────────────────────────────────────
@@ -1318,8 +1308,7 @@ async function testWikiSyncEdgeCases() {
 			`/notes/since?since=${encodeURIComponent(sinceMarker)}`,
 			wikiApiKey,
 		);
-		if (status !== 200)
-			return { error: `Status ${status}` };
+		if (status !== 200) return { error: `Status ${status}` };
 		const body = data?.data || data;
 		const notes = body?.notes || [];
 		if (!notes.some((n) => n.path === SINCE_PATH))
@@ -1387,12 +1376,10 @@ async function testWikiAdminBlockKit() {
 				visibility: "public",
 			},
 		});
-		if (status !== 200)
-			return; // 400 would be fine too
+		if (status !== 200) return; // 400 would be fine too
 		const blocks = data?.data?.blocks || data?.blocks || [];
 		const hasError = blocks.some((b) => b.variant === "error" || b.type === "banner");
-		if (!hasError)
-			return { error: "Chemin invalide accepté par do_create sans erreur" };
+		if (!hasError) return { error: "Chemin invalide accepté par do_create sans erreur" };
 	});
 
 	// ── nav_edit — ouvre la page d'édition ───────────────────────────────────
@@ -1402,12 +1389,10 @@ async function testWikiAdminBlockKit() {
 				action_id: "nav_edit",
 				value: JSON.stringify({ note_path: ADM_PATH }),
 			});
-			if (status !== 200)
-				return { error: `Status ${status}` };
+			if (status !== 200) return { error: `Status ${status}` };
 			const blocks = data?.data?.blocks || data?.blocks || [];
 			const hasForm = blocks.some((b) => b.type === "form");
-			if (!hasForm)
-				return { warn: "Formulaire d'édition absent de la réponse" };
+			if (!hasForm) return { warn: "Formulaire d'édition absent de la réponse" };
 		});
 
 		// ── do_edit — met à jour le contenu ──────────────────────────────────
@@ -1420,8 +1405,7 @@ async function testWikiAdminBlockKit() {
 					visibility: "public",
 				},
 			});
-			if (status !== 200)
-				return { error: `Status ${status} — ${data?.error?.message}` };
+			if (status !== 200) return { error: `Status ${status} — ${data?.error?.message}` };
 			const blocks = data?.data?.blocks || data?.blocks || [];
 			const hasSuccess = blocks.some(
 				(b) => b.title && (b.title.includes("Sauvegardé") || b.title.includes("mis à jour")),
@@ -1435,8 +1419,7 @@ async function testWikiAdminBlockKit() {
 				action_id: "do_edit",
 				values: { _note_id: adminNoteId, content: "" },
 			});
-			if (status !== 200)
-				return;
+			if (status !== 200) return;
 			const blocks = data?.data?.blocks || data?.blocks || [];
 			const hasError = blocks.some((b) => b.variant === "error");
 			if (!hasError) return { error: "Contenu vide accepté par do_edit" };
@@ -1448,8 +1431,7 @@ async function testWikiAdminBlockKit() {
 				action_id: "do_move",
 				values: { _note_id: adminNoteId, new_path: ADM_PATH2 },
 			});
-			if (status !== 200)
-				return { error: `Status ${status} — ${data?.error?.message}` };
+			if (status !== 200) return { error: `Status ${status} — ${data?.error?.message}` };
 			const blocks = data?.data?.blocks || data?.blocks || [];
 			const hasSuccess = blocks.some(
 				(b) => b.title && (b.title.includes("Déplacée") || b.title.includes("déplacée")),
@@ -1464,8 +1446,7 @@ async function testWikiAdminBlockKit() {
 				action_id: "do_delete",
 				value: JSON.stringify({ note_path: ADM_PATH2 }),
 			});
-			if (status !== 200)
-				return { error: `Status ${status} — ${data?.error?.message}` };
+			if (status !== 200) return { error: `Status ${status} — ${data?.error?.message}` };
 			const blocks = data?.data?.blocks || data?.blocks || [];
 			const hasSuccess = blocks.some(
 				(b) => b.title && (b.title.includes("Supprimée") || b.title.includes("supprimée")),
@@ -1475,7 +1456,11 @@ async function testWikiAdminBlockKit() {
 		});
 
 		await check("Admin Block Kit — note supprimée introuvable après do_delete", async () => {
-			const { status } = await pluginPostWithKey("/notes/get", { path: ADM_PATH2 }, wikiApiKey || "");
+			const { status } = await pluginPostWithKey(
+				"/notes/get",
+				{ path: ADM_PATH2 },
+				wikiApiKey || "",
+			);
 			if (status === 200) return { error: "Note toujours accessible après do_delete" };
 		});
 	} else {

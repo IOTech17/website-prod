@@ -269,10 +269,7 @@ export const bundleCommand = defineCommand({
 								const backendProbeDir = join(tmpDir, "backend-probe");
 								const probeShimDir = join(tmpDir, "probe-shims");
 								await mkdir(probeShimDir, { recursive: true });
-								await writeFile(
-									join(probeShimDir, "emdash.mjs"),
-									EMDASH_BUNDLE_SHIM,
-								);
+								await writeFile(join(probeShimDir, "emdash.mjs"), EMDASH_BUNDLE_SHIM);
 								await build({
 									config: false,
 									entry: [backendEntry],

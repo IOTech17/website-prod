@@ -451,25 +451,45 @@
 						{
 							"_type": "block",
 							"style": "normal",
-							"children": [{ "_type": "span", "text": "Tout commença lors du Noël en 2001 où j'eus mon premier ordinateur. Dès lors, l'informatique ne me quitta plus. Autodidacte passionné, je passai mes années à démonter, comprendre, réparer et assembler — transformant chaque panne en apprentissage." }],
+							"children": [
+								{
+									"_type": "span",
+									"text": "Tout commença lors du Noël en 2001 où j'eus mon premier ordinateur. Dès lors, l'informatique ne me quitta plus. Autodidacte passionné, je passai mes années à démonter, comprendre, réparer et assembler — transformant chaque panne en apprentissage."
+								}
+							],
 							"markDefs": []
 						},
 						{
 							"_type": "block",
 							"style": "normal",
-							"children": [{ "_type": "span", "text": "Après des années à aider famille, amis et voisins à résoudre leurs problèmes informatiques, il devint évident que cette passion pouvait devenir un métier à part entière. En 2020, je franchis le pas et fondai IØTech à Saint-Pierre-d'Oléron." }],
+							"children": [
+								{
+									"_type": "span",
+									"text": "Après des années à aider famille, amis et voisins à résoudre leurs problèmes informatiques, il devint évident que cette passion pouvait devenir un métier à part entière. En 2020, je franchis le pas et fondai IØTech à Saint-Pierre-d'Oléron."
+								}
+							],
 							"markDefs": []
 						},
 						{
 							"_type": "block",
 							"style": "normal",
-							"children": [{ "_type": "span", "text": "Mon objectif est simple : apporter aux petites entreprises de Charente-Maritime le même niveau de service et d'expertise que celui dont bénéficient les grandes structures, à des tarifs adaptés à leur réalité." }],
+							"children": [
+								{
+									"_type": "span",
+									"text": "Mon objectif est simple : apporter aux petites entreprises de Charente-Maritime le même niveau de service et d'expertise que celui dont bénéficient les grandes structures, à des tarifs adaptés à leur réalité."
+								}
+							],
 							"markDefs": []
 						},
 						{
 							"_type": "block",
 							"style": "normal",
-							"children": [{ "_type": "span", "text": "Depuis lors, j'interviens auprès d'artisans, de commerçants, de professions libérales et d'associations pour qu'ils puissent se concentrer sur leur cœur de métier, l'informatique en moins." }],
+							"children": [
+								{
+									"_type": "span",
+									"text": "Depuis lors, j'interviens auprès d'artisans, de commerçants, de professions libérales et d'associations pour qu'ils puissent se concentrer sur leur cœur de métier, l'informatique en moins."
+								}
+							],
 							"markDefs": []
 						}
 					]
@@ -503,7 +523,9 @@
 						{
 							"_type": "block",
 							"style": "normal",
-							"markDefs": [{ "_key": "email", "_type": "link", "href": "mailto:contact@iotech17.com" }],
+							"markDefs": [
+								{ "_key": "email", "_type": "link", "href": "mailto:contact@iotech17.com" }
+							],
 							"children": [
 								{ "_type": "span", "marks": ["strong"], "text": "Courriel : " },
 								{ "_type": "span", "marks": ["email"], "text": "contact@iotech17.com" }

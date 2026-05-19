@@ -187,11 +187,14 @@ function convertTextBlock(
 	const { children, markDefs } = convertInlineContent(content, includes, options, generateKey);
 
 	// Skip empty paragraphs (Contentful emits these often)
+	const firstChild = children[0];
 	if (
 		style === "normal" &&
 		children.length === 1 &&
-		children[0]!._type === "span" &&
-		(children[0] as PortableTextSpan).text === ""
+		firstChild !== undefined &&
+		firstChild._type === "span" &&
+		"text" in firstChild &&
+		firstChild.text === ""
 	) {
 		return null;
 	}
@@ -321,6 +324,7 @@ function convertEmbeddedEntry(
 	includes: ContentfulIncludes,
 	generateKey: () => string,
 ): OutputBlock | null {
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Contentful node.data is any; shape validated by optional chaining
 	const targetId = (node.data?.target as { sys?: { id?: string } })?.sys?.id;
 	if (!targetId) return null;
 
@@ -355,6 +359,7 @@ function convertEmbeddedAsset(
 	includes: ContentfulIncludes,
 	generateKey: () => string,
 ): OutputBlock | null {
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Contentful node.data is any; shape validated by optional chaining
 	const targetId = (node.data?.target as { sys?: { id?: string } })?.sys?.id;
 	if (!targetId) return null;
 
@@ -400,6 +405,7 @@ function convertInlineContent(
 				marks,
 			});
 		} else if (node.nodeType === INLINES.HYPERLINK) {
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Contentful node.data is any
 			const rawUri = (node.data?.uri as string) ?? "";
 			const href = sanitizeUri(rawUri);
 			const markKey = generateKey();
@@ -431,6 +437,7 @@ function convertInlineContent(
 			node.nodeType === INLINES.ENTRY_HYPERLINK ||
 			node.nodeType === INLINES.ASSET_HYPERLINK
 		) {
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Contentful node.data is any
 			const targetId = (node.data?.target as { sys?: { id?: string } })?.sys?.id;
 			let href = "#";
 
@@ -439,8 +446,8 @@ function convertInlineContent(
 				if (entry) {
 					const rawHref = options.entryHrefResolver
 						? options.entryHrefResolver(entry)
-						: entry.fields.slug
-							? `/${entry.fields.slug as string}/`
+						: typeof entry.fields.slug === "string"
+							? `/${entry.fields.slug}/`
 							: "#";
 					href = sanitizeUri(rawHref);
 				}
@@ -473,6 +480,7 @@ function convertInlineContent(
 			node.nodeType === INLINES.EMBEDDED_ENTRY ||
 			node.nodeType === INLINES.EMBEDDED_RESOURCE
 		) {
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Contentful node.data is any
 			const targetId = (node.data?.target as { sys?: { id?: string } })?.sys?.id;
 			console.warn(
 				`[rich-text-to-pt] Inline ${node.nodeType} encountered (target: ${targetId ?? "unknown"}). ` +
@@ -560,19 +568,24 @@ export function buildIncludes(raw: {
 	const assets = new Map<string, import("./types.js").ContentfulAsset>();
 
 	for (const entry of raw.Entry ?? []) {
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- raw Contentful API object; shape validated by optional chaining
 		const sys = entry.sys as { id?: string; contentType?: { sys?: { id?: string } } } | undefined;
 		if (!sys?.id) continue;
 		entries.set(sys.id, {
 			id: sys.id,
 			contentType: sys.contentType?.sys?.id ?? "unknown",
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- raw Contentful API object
 			fields: (entry.fields as Record<string, unknown>) ?? {},
 		});
 	}
 
 	for (const asset of raw.Asset ?? []) {
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- raw Contentful API object
 		const sys = asset.sys as { id?: string } | undefined;
 		if (!sys?.id) continue;
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- raw Contentful API object
 		const fields = asset.fields as Record<string, unknown> | undefined;
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- raw Contentful API object; shape validated by optional chaining
 		const file = fields?.file as
 			| {
 					url?: string;
@@ -582,8 +595,8 @@ export function buildIncludes(raw: {
 			| undefined;
 		assets.set(sys.id, {
 			id: sys.id,
-			title: fields?.title as string | undefined,
-			description: fields?.description as string | undefined,
+			title: typeof fields?.title === "string" ? fields.title : undefined,
+			description: typeof fields?.description === "string" ? fields.description : undefined,
 			url: file?.url ?? "",
 			width: file?.details?.image?.width,
 			height: file?.details?.image?.height,

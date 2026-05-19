@@ -15,6 +15,9 @@
 import { definePlugin, PluginRouteError } from "emdash";
 import type { PluginContext } from "emdash";
 
+// eslint-disable-next-line no-control-regex
+const RE_CTRL_CHARS = /[\x00-\x1f]/;
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface WikiNote {
@@ -128,16 +131,7 @@ const ALLOWED_MIME_TYPES = new Set([
 	"application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ]);
 
-const IMAGE_EXTENSIONS = new Set([
-	"png",
-	"jpg",
-	"jpeg",
-	"gif",
-	"webp",
-	"avif",
-	"bmp",
-	"tiff",
-]);
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "tiff"]);
 
 function formatBytes(bytes: number): string {
 	if (bytes < 1024) return `${bytes} o`;
@@ -153,8 +147,7 @@ function validateNotePath(path: string): string | null {
 	if (!path) return "path is required";
 	if (!path.endsWith(".md")) return "path must end with .md";
 	if (path.length > 512) return "path must be at most 512 characters";
-	if (RE_INVALID_PATH_CHARS.test(path))
-		return "path must not contain control characters";
+	if (RE_INVALID_PATH_CHARS.test(path)) return "path must not contain control characters";
 	if (path.split("/").some((s) => s === ".." || s === "." || s === ""))
 		return "path must not contain .., ., or empty segments (including leading /)";
 	return null;
@@ -391,7 +384,12 @@ export default definePlugin({
 				const total = notes.length;
 				// truncated: caller's view is capped by limit. pool_overflow: underlying pool
 				// hit 5000 — authenticated clients should use notes/since for full sync.
-				return { notes: notes.slice(0, limit), total, truncated: notes.length > limit, pool_overflow };
+				return {
+					notes: notes.slice(0, limit),
+					total,
+					truncated: notes.length > limit,
+					pool_overflow,
+				};
 			},
 		},
 
@@ -588,7 +586,8 @@ export default definePlugin({
 					path: existing.path,
 					content: input.content !== undefined ? input.content : existing.content,
 					visibility: input.visibility ?? existing.visibility,
-					title: input.title || (input.content ? extractTitle(input.content, path) : existing.title),
+					title:
+						input.title || (input.content ? extractTitle(input.content, path) : existing.title),
 					tags: input.tags || (input.content ? extractTags(input.content) : existing.tags),
 					updatedAt: new Date().toISOString(),
 				};
@@ -749,7 +748,7 @@ export default definePlugin({
 							created++;
 						}
 					} catch (err) {
-						ctx.log.error(`[markdown-wiki] Sync skipped ${n.path}: ${err}`);
+						ctx.log.error(`[markdown-wiki] Sync skipped ${n.path}: ${String(err)}`);
 					}
 				}
 
@@ -769,7 +768,7 @@ export default definePlugin({
 								for (const h of hist.items) await storage.history.delete(h.id);
 							}
 						} catch (err) {
-							ctx.log.error(`[markdown-wiki] Sync delete failed for ${path}: ${err}`);
+							ctx.log.error(`[markdown-wiki] Sync delete failed for ${path}: ${String(err)}`);
 						}
 					}
 				}
@@ -820,7 +819,7 @@ export default definePlugin({
 				if (
 					trimmedFilename.length > 255 ||
 					trimmedFilename.includes("/") ||
-					[...trimmedFilename].some((c) => c.charCodeAt(0) < 0x20)
+					RE_CTRL_CHARS.test(trimmedFilename)
 				)
 					throw PluginRouteError.badRequest(
 						"invalid filename — must be a basename, max 255 chars, no control characters",
@@ -923,7 +922,7 @@ export default definePlugin({
 					try {
 						await ctx.media.delete(result.data.storageKey);
 					} catch (err) {
-						ctx.log.warn(`[markdown-wiki] Could not delete R2 object for ${path}: ${err}`);
+						ctx.log.warn(`[markdown-wiki] Could not delete R2 object for ${path}: ${String(err)}`);
 					}
 				}
 				ctx.log.info(`[markdown-wiki] Attachment deleted: ${path}`);
@@ -1471,7 +1470,7 @@ export default definePlugin({
 							],
 						};
 
-					const existing = (await storage.notes.get(noteId)) as WikiNote | null;
+					const existing = await storage.notes.get(noteId);
 					if (!existing)
 						return {
 							blocks: [
@@ -1627,7 +1626,7 @@ export default definePlugin({
 						};
 
 					// Look up by UUID — prevents accidental move of a different note
-					const existingData = (await storage.notes.get(noteId)) as WikiNote | null;
+					const existingData = await storage.notes.get(noteId);
 					if (!existingData)
 						return {
 							blocks: [
@@ -1655,7 +1654,11 @@ export default definePlugin({
 							],
 						};
 
-					const moved: WikiNote = { ...existingData, path: newPath, updatedAt: new Date().toISOString() };
+					const moved: WikiNote = {
+						...existingData,
+						path: newPath,
+						updatedAt: new Date().toISOString(),
+					};
 					await storage.notes.put(id, moved);
 
 					const tokens = await storage.search_index.query({ where: { notePath: oldPath } });
@@ -1860,7 +1863,9 @@ export default definePlugin({
 						try {
 							await ctx.media.delete(result.data.storageKey);
 						} catch (err) {
-							ctx.log.warn(`[markdown-wiki] Could not delete R2 object for ${attachment_path}: ${err}`);
+							ctx.log.warn(
+								`[markdown-wiki] Could not delete R2 object for ${attachment_path}: ${String(err)}`,
+							);
 						}
 					}
 					ctx.log.info(`[markdown-wiki] Admin deleted attachment: ${attachment_path}`);
