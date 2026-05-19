@@ -14,7 +14,16 @@ interface Props {
 }
 
 const { title, description, tree, currentPath = "", totalNotes, wikiSlug = "wiki", isAdmin = false } = Astro.props;
-const wikiApiKey = import.meta.env.WIKI_API_KEY || "";
+// import.meta.env may not surface Cloudflare Workers secrets reliably (Vite inlines at build time).
+// Prefer cloudflare:workers env binding; fall back to import.meta.env for Node.js dev.
+let wikiApiKey = import.meta.env.WIKI_API_KEY || "";
+if (!wikiApiKey) {
+	try {
+		// @ts-ignore — cloudflare:workers is unavailable in Node.js dev mode
+		const { env: cfEnv } = await import("cloudflare:workers");
+		wikiApiKey = cfEnv?.WIKI_API_KEY || "";
+	} catch { /* not on Cloudflare Workers */ }
+}
 ---
 
 <Base title={title} description={description}>
