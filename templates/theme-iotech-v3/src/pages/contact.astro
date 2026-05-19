@@ -1,12 +1,18 @@
 ---
 import Base from "../layouts/Base.astro";
+import { getEmDashEntry } from "emdash";
+import { PortableText } from "emdash/ui";
+
+const { entry: page, cacheHint } = await getEmDashEntry("pages", "contact");
+if (!page) return Astro.redirect("/404");
+if (Astro.cache?.enabled) Astro.cache.set(cacheHint);
 ---
 
-<Base title="Contact" description="Contactez IØTech pour vos besoins informatiques en Charente-Maritime.">
+<Base title={page.data.title ?? "Contact"} description="Contactez IØTech pour vos besoins informatiques en Charente-Maritime.">
 	<section class="page-hero contact-hero-centered">
 		<div class="page-hero-inner">
 			<p class="page-eyebrow">IØTECH</p>
-			<h1 class="page-title">Nous contacter</h1>
+			<h1 class="page-title">{page.data.title ?? "Contact"}</h1>
 			<p class="page-subtitle-hero">Un projet, une panne ou une question ? Réponse rapide pour les PME et indépendants.</p>
 		</div>
 	</section>
@@ -35,9 +41,7 @@ import Base from "../layouts/Base.astro";
 			</form>
 
 			<div class="contact-info-block">
-				<p><strong>Adresse :</strong> Saint-Pierre-d'Oléron, Charente-Maritime</p>
-				<p><strong>Téléphone :</strong> <a href="tel:+33600000000">+33 6 00 00 00 00</a></p>
-				<p><strong>Courriel :</strong> <a href="mailto:contact@iotech17.com">contact@iotech17.com</a></p>
+				<PortableText value={page.data.body ?? []} />
 			</div>
 		</div>
 	</div>
@@ -105,8 +109,9 @@ import Base from "../layouts/Base.astro";
 	font-size: 0.9rem;
 	color: var(--text-1);
 }
-.contact-info-block a { color: var(--accent); text-decoration: none; }
-.contact-info-block a:hover { text-decoration: underline; }
+.contact-info-block :global(p) { margin: 0; }
+.contact-info-block :global(a) { color: var(--accent); text-decoration: none; }
+.contact-info-block :global(a:hover) { text-decoration: underline; }
 :global(.contact-hero-centered) { text-align: center; }
 :global(.contact-hero-centered) .page-subtitle-hero { margin: 0 auto; }
 @media (max-width: 480px) {
