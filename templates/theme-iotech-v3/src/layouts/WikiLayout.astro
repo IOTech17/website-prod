@@ -20,7 +20,7 @@ let wikiApiKey = import.meta.env.WIKI_API_KEY || "";
 if (!wikiApiKey) {
 	try {
 		// @ts-ignore — cloudflare:workers is unavailable in Node.js dev mode
-		const { env: cfEnv } = await import("cloudflare:workers");
+		const { env: cfEnv } = await import(/* @vite-ignore */ "cloudflare:workers");
 		wikiApiKey = cfEnv?.WIKI_API_KEY || "";
 	} catch { /* not on Cloudflare Workers */ }
 }
