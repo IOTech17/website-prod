@@ -363,6 +363,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
 							collectPageMetadata: runtime.collectPageMetadata.bind(runtime),
 							collectPageFragments: runtime.collectPageFragments.bind(runtime),
 							getPublicMediaUrl: createPublicMediaUrlResolver(runtime.storage),
+							// Expose plugin route dispatch so SSR pages can call public plugin
+							// routes directly rather than via self-referential HTTP fetch.
+							// Self-referential fetches are unreliable on Cloudflare Workers.
+							handlePluginApiRoute: runtime.handlePluginApiRoute.bind(runtime),
+							getPluginRouteMeta: runtime.getPluginRouteMeta.bind(runtime),
 						} as EmDashHandlers;
 					} catch {
 						// Non-fatal — EmDashHead will fall back to base SEO contributions

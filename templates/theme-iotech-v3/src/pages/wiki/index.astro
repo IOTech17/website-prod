@@ -7,19 +7,33 @@ const WIKI_SLUG = "wiki";
 const _user = (Astro.locals as any).user;
 const isAdmin = !!(_user && _user.role >= 50);
 
-const wikiApiKey = import.meta.env.WIKI_API_KEY || "";
+let wikiApiKey = import.meta.env.WIKI_API_KEY || "";
+if (!wikiApiKey) {
+	try {
+		// @ts-ignore — cloudflare:workers is unavailable in Node.js dev mode
+		const { env: cfEnv } = await import(/* @vite-ignore */ "cloudflare:workers");
+		wikiApiKey = cfEnv?.WIKI_API_KEY || "";
+	} catch { /* not on Cloudflare Workers */ }
+}
 const authHeaders: Record<string, string> = isAdmin && wikiApiKey
 	? { "X-Wiki-Key": wikiApiKey }
 	: {};
 
+const emdash = (Astro.locals as any).emdash;
+
 let notes: NoteEntry[] = [];
 try {
-	const res = await fetch(new URL("/_emdash/api/plugins/markdown-wiki/notes", Astro.url).toString(), {
-		headers: authHeaders,
-	});
-	if (res.ok) {
-		const data = await res.json();
-		notes = data?.data?.notes || data?.notes || [];
+	if (emdash?.handlePluginApiRoute) {
+		// Direct dispatch — avoids self-referential HTTP fetch (unreliable on Cloudflare Workers)
+		const req = new Request(new URL("/_emdash/api/plugins/markdown-wiki/notes", Astro.url), { headers: authHeaders });
+		const result = await emdash.handlePluginApiRoute("markdown-wiki", "GET", "/notes", req);
+		if (result?.success) notes = result.data?.notes || [];
+	} else {
+		const res = await fetch(new URL("/_emdash/api/plugins/markdown-wiki/notes", Astro.url).toString(), { headers: authHeaders });
+		if (res.ok) {
+			const data = await res.json();
+			notes = data?.data?.notes || data?.notes || [];
+		}
 	}
 } catch {}
 
