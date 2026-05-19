@@ -55,5 +55,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: pnpm --filter @iotech/theme-iotech-cloudflare run deploy
 
-      - name: Smoke test production
-        run: node templates/theme-iotech-cloudflare-v3/smoke-test.mjs https://website-prod.i0tech.workers.dev
+      - name: Smoke test production (with propagation retry)
+        run: |
+          for attempt in 1 2 3; do
+            echo "Smoke test attempt $attempt/3..."
+            node templates/theme-iotech-cloudflare-v3/smoke-test.mjs https://website-prod.i0tech.workers.dev && exit 0
+            [ $attempt -lt 3 ] && echo "Failed — waiting 30s for Cloudflare propagation..." && sleep 30
+          done
+          echo "Smoke test failed after 3 attempts"
+          exit 1
