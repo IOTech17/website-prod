@@ -28,6 +28,7 @@ const SHARED_FILES = [
 	"src/pages/services.astro",
 	"src/pages/contact.astro",
 	"src/pages/a-propos.astro",
+	"src/pages/api/contact.ts",
 	"src/pages/posts/index.astro",
 	"src/pages/posts/[slug].astro",
 	"src/pages/wiki/index.astro",

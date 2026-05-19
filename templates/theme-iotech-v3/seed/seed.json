@@ -90,6 +90,38 @@
 					"type": "portableText"
 				}
 			]
+		},
+		{
+			"slug": "messages",
+			"label": "Messages",
+			"labelSingular": "Message",
+			"supports": [],
+			"fields": [
+				{
+					"slug": "name",
+					"label": "Nom",
+					"type": "string",
+					"required": true,
+					"searchable": true
+				},
+				{
+					"slug": "email",
+					"label": "Email",
+					"type": "string",
+					"required": true
+				},
+				{
+					"slug": "phone",
+					"label": "Téléphone",
+					"type": "string"
+				},
+				{
+					"slug": "message",
+					"label": "Message",
+					"type": "text",
+					"required": true
+				}
+			]
 		}
 	],
 	"menus": [

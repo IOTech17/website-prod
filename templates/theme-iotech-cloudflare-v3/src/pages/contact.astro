@@ -18,7 +18,10 @@ if (page && Astro.cache?.enabled) Astro.cache.set(cacheHint);
 
 	<div class="contact-outer">
 		<div class="contact-form-card">
-			<form method="POST" action="/_emdash/api/forms/contact">
+			<div id="form-success" class="form-success-banner" hidden>
+				<p>✓ Message envoyé. Nous vous répondrons dans les plus brefs délais.</p>
+			</div>
+			<form id="contact-form">
 				<div class="contact-name-row">
 					<div class="form-group">
 						<input type="text" id="firstname" name="firstname" class="form-input" placeholder="Prénom" />
@@ -36,7 +39,8 @@ if (page && Astro.cache?.enabled) Astro.cache.set(cacheHint);
 				<div class="form-group">
 					<textarea id="message" name="message" class="form-input" style="min-height:150px;resize:vertical" placeholder="Message" required></textarea>
 				</div>
-				<button type="submit" class="form-submit">Envoyer</button>
+				<div id="form-error" class="form-error-msg" hidden></div>
+				<button type="submit" id="form-submit" class="form-submit">Envoyer</button>
 			</form>
 
 			<div class="contact-info-block">
@@ -121,7 +125,59 @@ if (page && Astro.cache?.enabled) Astro.cache.set(cacheHint);
 .contact-info-block :global(a:hover) { text-decoration: underline; }
 :global(.contact-hero-centered) { text-align: center; }
 :global(.contact-hero-centered) .page-subtitle-hero { margin: 0 auto; }
+.form-success-banner {
+	background: color-mix(in srgb, var(--accent) 12%, transparent);
+	border: 1px solid var(--accent);
+	border-radius: 4px;
+	padding: 1rem 1.25rem;
+	margin-bottom: 1.5rem;
+	color: var(--text-0);
+	font-size: 0.95rem;
+}
+.form-success-banner p { margin: 0; }
+.form-error-msg {
+	color: #e05252;
+	font-size: 0.9rem;
+	margin-bottom: 0.75rem;
+}
+.form-submit:disabled { opacity: 0.65; cursor: not-allowed; }
 @media (max-width: 480px) {
 	.contact-name-row { grid-template-columns: 1fr; }
 }
 </style>
+
+<script>
+const form    = document.getElementById("contact-form") as HTMLFormElement | null;
+const success = document.getElementById("form-success") as HTMLElement | null;
+const errBox  = document.getElementById("form-error")   as HTMLElement | null;
+const btn     = document.getElementById("form-submit")  as HTMLButtonElement | null;
+
+form?.addEventListener("submit", async (e) => {
+	e.preventDefault();
+	if (!btn || !errBox || !success) return;
+
+	btn.disabled    = true;
+	btn.textContent = "Envoi en cours…";
+	errBox.hidden   = true;
+
+	try {
+		const res  = await fetch("/api/contact", { method: "POST", body: new FormData(form!) });
+		const data = await res.json() as { success?: boolean; error?: string };
+
+		if (res.ok && data.success) {
+			form!.hidden    = true;
+			success.hidden  = false;
+		} else {
+			errBox.textContent = data.error ?? "Erreur lors de l'envoi. Veuillez réessayer.";
+			errBox.hidden      = false;
+			btn.disabled       = false;
+			btn.textContent    = "Envoyer";
+		}
+	} catch {
+		errBox.textContent = "Erreur réseau. Veuillez réessayer.";
+		errBox.hidden      = false;
+		btn.disabled       = false;
+		btn.textContent    = "Envoyer";
+	}
+});
+</script>
