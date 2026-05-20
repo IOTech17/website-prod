@@ -34,13 +34,14 @@ if (page && Astro.cache?.enabled) Astro.cache.set(cacheHint);
 						)}
 					</div>
 					<div class="story-photo">
-						<div class="photo-wrapper">
-							<img
-								src="/vincent%20profile.jpg"
-								alt="Vincent Bariteau — IØTech"
-								class="profile-photo"
-								onerror="this.parentElement.classList.add('photo-placeholder')"
-							/>
+						<div class={`photo-wrapper${page?.data.photo ? "" : " photo-placeholder"}`}>
+							{page?.data.photo && (
+								<img
+									src={page.data.photo}
+									alt="Vincent Bariteau — IØTech"
+									class="profile-photo"
+								/>
+							)}
 						</div>
 						<div class="photo-caption">
 							<strong>Vincent Bariteau</strong>
