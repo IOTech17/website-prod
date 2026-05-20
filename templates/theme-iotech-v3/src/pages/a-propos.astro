@@ -5,6 +5,7 @@ import { PortableText } from "emdash/ui";
 
 const { entry: page, cacheHint } = await getEmDashEntry("pages", "a-propos");
 if (page && Astro.cache?.enabled) Astro.cache.set(cacheHint);
+const profilePhoto = page?.data.photo?.trim() || null;
 ---
 
 <Base title={page?.data.title ?? "À propos"} description="En savoir plus sur IØTech, votre prestataire informatique en Charente-Maritime.">
@@ -34,10 +35,10 @@ if (page && Astro.cache?.enabled) Astro.cache.set(cacheHint);
 						)}
 					</div>
 					<div class="story-photo">
-						<div class={`photo-wrapper${page?.data.photo ? "" : " photo-placeholder"}`}>
-							{page?.data.photo && (
+						<div class={`photo-wrapper${profilePhoto ? "" : " photo-placeholder"}`}>
+							{profilePhoto && (
 								<img
-									src={page.data.photo}
+									src={profilePhoto}
 									alt="Vincent Bariteau — IØTech"
 									class="profile-photo"
 								/>
